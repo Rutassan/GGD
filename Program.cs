@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 
+[ExcludeFromCodeCoverage]
 public class Program
 {
     public static void Main()

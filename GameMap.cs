@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 
 public class GameMap
@@ -25,6 +26,7 @@ public class GameMap
         };
     }
 
+    [ExcludeFromCodeCoverage]
     public void Draw(int charSize)
     {
         for (int y = 0; y < _layout.Length; y++)

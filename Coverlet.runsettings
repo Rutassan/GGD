@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage" uri="ms-dotnettest://Microsoft/TestPlatform/Net/CodeCoverage/2.0" assemblyQualifiedName="Coverlet.Collector.DataCollector, coverlet.collector, Version=6.0.0.0, Culture=neutral, PublicKeyToken=null">
+        <Configuration>
+          <ExcludeByFile>$(MSBuildProjectDirectory)/tests/**/*.cs</ExcludeByFile>
+          <ExcludeByMethod>
+            GGD.Player.Draw
+            GGD.GameMap.Draw
+            GGD.Program.*
+          </ExcludeByMethod>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

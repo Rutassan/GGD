@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 
 public class Player
@@ -15,6 +16,7 @@ public class Player
         Color = color;
     }
 
+    [ExcludeFromCodeCoverage]
     public void Draw(int fontSize)
     {
         Raylib.DrawText(Character.ToString(), X * fontSize, Y * fontSize, fontSize, Color);
