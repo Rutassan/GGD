@@ -11,6 +11,7 @@ public class ManualPlayerController : IPlayerController
 
     public void Update(Player player, GameMap map)
     {
+        // Movement
         if (_inputService.IsKeyPressed((KeyboardKey)262)) // KEY_RIGHT
         {
             player.Move(1, 0, map);
@@ -26,6 +27,18 @@ public class ManualPlayerController : IPlayerController
         if (_inputService.IsKeyPressed((KeyboardKey)264)) // KEY_DOWN
         {
             player.Move(0, 1, map);
+        }
+
+        // Mining
+        if (_inputService.IsKeyPressed((KeyboardKey)77)) // KEY_M
+        {
+            player.Mine(map);
+        }
+
+        // Building (Stone Wall for now)
+        if (_inputService.IsKeyPressed((KeyboardKey)66)) // KEY_B
+        {
+            player.Build(map, "Stone");
         }
     }
 }
