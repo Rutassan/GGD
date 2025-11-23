@@ -8,40 +8,42 @@ public class Program
     {
         const int screenWidth = 800;
         const int screenHeight = 450;
-        const string windowTitle = "ASCII Game v0.01";
+        const string windowTitle = "ASCII Game v0.02"; // Обновляем версию
         const int charSize = 20;
 
         Raylib.InitWindow(screenWidth, screenHeight, windowTitle);
         Raylib.SetTargetFPS(60);
 
-        // WORKAROUND: Using new Color() because Color.GREEN is not found.
         Player player = new Player(5, 5, '@', new Color(0, 255, 0, 255)); 
         GameMap gameMap = new GameMap();
 
+        IInputService inputService = new RaylibInputService(); // Создаем сервис ввода
+        IPlayerController manualController = new ManualPlayerController(inputService); // Передаем сервис ввода
+        IPlayerController aiController = new AIPlayerController();
+        IPlayerController currentController = manualController; // По умолчанию - ручное управление
+
         while (!Raylib.WindowShouldClose())
         {
-            // Update
-            // WORKAROUND: Explicitly casting int key codes because KeyboardKey.KEY_XXX is not found.
-            if (Raylib.IsKeyPressed((KeyboardKey)262)) // KEY_RIGHT
+            // Переключение контроллеров
+            if (Raylib.IsKeyPressed((KeyboardKey)65)) // Клавиша 'A' (65) для переключения
             {
-                player.Move(1, 0, gameMap);
+                if (currentController == manualController)
+                {
+                    currentController = aiController;
+                    Raylib.SetWindowTitle("ASCII Game v0.02 (AI Controlled)");
+                }
+                else
+                {
+                    currentController = manualController;
+                    Raylib.SetWindowTitle("ASCII Game v0.02 (Manual Controlled)");
+                }
             }
-            if (Raylib.IsKeyPressed((KeyboardKey)263)) // KEY_LEFT
-            {
-                player.Move(-1, 0, gameMap);
-            }
-            if (Raylib.IsKeyPressed((KeyboardKey)265)) // KEY_UP
-            {
-                player.Move(0, -1, gameMap);
-            }
-            if (Raylib.IsKeyPressed((KeyboardKey)264)) // KEY_DOWN
-            {
-                player.Move(0, 1, gameMap);
-            }
+
+            // Обновление игрока через текущий контроллер
+            currentController.Update(player, gameMap);
 
             // Draw
             Raylib.BeginDrawing();
-            // WORKAROUND: Using new Color() because Color.BLACK is not found.
             Raylib.ClearBackground(new Color(0, 0, 0, 255));
             gameMap.Draw(charSize);
             player.Draw(charSize);

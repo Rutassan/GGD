@@ -1,56 +1,61 @@
-using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 
 public class GameMap
 {
-    private string[] _layout;
-
-    // Using new Color() as a workaround
-    private readonly Color _wallColor = new Color(128, 128, 128, 255); // Gray
-    private readonly Color _floorColor = new Color(50, 50, 50, 255);   // Dark Gray
+    private char[,] _map;
+    private const int _mapWidth = 20;
+    private const int _mapHeight = 10;
 
     public GameMap()
     {
-        _layout = new string[]
-        {
-            "####################",
-            "#..................#",
-            "#..................#",
-            "#..................#",
-            "#..................#",
-            "#..................#",
-            "#..................#",
-            "#..................#",
-            "#..................#",
-            "####################"
-        };
+        _map = new char[_mapHeight, _mapWidth];
+        InitializeMap();
     }
 
-    [ExcludeFromCodeCoverage]
-    public void Draw(int charSize)
+    private void InitializeMap()
     {
-        for (int y = 0; y < _layout.Length; y++)
+        for (int y = 0; y < _mapHeight; y++)
         {
-            for (int x = 0; x < _layout[y].Length; x++)
+            for (int x = 0; x < _mapWidth; x++)
             {
-                char tile = _layout[y][x];
-                Color color = _floorColor;
-                if (tile == '#')
+                if (x == 0 || x == _mapWidth - 1 || y == 0 || y == _mapHeight - 1)
                 {
-                    color = _wallColor;
+                    _map[y, x] = '#'; // Walls
                 }
-                
-                Raylib.DrawText(tile.ToString(), x * charSize, y * charSize, charSize, color);
+                else
+                {
+                    _map[y, x] = '.'; // Empty space
+                }
             }
         }
     }
 
-    public bool IsWall(int x, int y)
+    public virtual bool IsWall(int x, int y)
     {
-        if (x < 0 || x >= _layout[0].Length || y < 0 || y >= _layout.Length)
+        if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight)
         {
-            return true; // Outside map boundaries is considered a wall
+            return true; // Out of bounds is a wall
         }
-        return _layout[y][x] == '#';
+        return _map[y, x] == '#';
+    }
+
+    public void Draw(int fontSize)
+    {
+        for (int y = 0; y < _mapHeight; y++)
+        {
+            for (int x = 0; x < _mapWidth; x++)
+            {
+                if (_map[y, x] == '#')
+                {
+                    // WORKAROUND: Using new Color() because Color.GRAY is not found.
+                    Raylib.DrawText(_map[y, x].ToString(), x * fontSize, y * fontSize, fontSize, new Color(121, 121, 121, 255)); 
+                }
+                else
+                {
+                    // WORKAROUND: Using new Color() because Color.DARKGRAY is not found.
+                    Raylib.DrawText(_map[y, x].ToString(), x * fontSize, y * fontSize, fontSize, new Color(80, 80, 80, 255));
+                }
+            }
+        }
     }
 }

@@ -22,7 +22,7 @@ public class Player
         Raylib.DrawText(Character.ToString(), X * fontSize, Y * fontSize, fontSize, Color);
     }
 
-    public void Move(int dx, int dy, GameMap map)
+    public virtual void Move(int dx, int dy, GameMap map) // Добавлено 'virtual'
     {
         int newX = X + dx;
         int newY = Y + dy;
