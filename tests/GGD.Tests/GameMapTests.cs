@@ -16,8 +16,8 @@ public class GameMapTests
     public void Constructor_GeneratesMapWithCorrectDimensions()
     {
         // Assert that the map is generated with the expected dimensions
-        Assert.That(GameMap.MapWidth, Is.EqualTo(20));
-        Assert.That(GameMap.MapHeight, Is.EqualTo(10));
+        Assert.That(GameMap.MapWidth, Is.EqualTo(80));
+        Assert.That(GameMap.MapHeight, Is.EqualTo(30));
     }
 
     [Test]
@@ -119,5 +119,21 @@ public class GameMapTests
         Assert.That(wallCount, Is.GreaterThanOrEqualTo(GameMap.MapWidth * 2 + (GameMap.MapHeight - 2) * 2)); // Boundary walls
         Assert.That(emptyCount, Is.GreaterThan(0)); // Should have some empty spaces
         Assert.That(resourceCount, Is.GreaterThanOrEqualTo(0)); // May have 0 depending on randomness, but should be tested for more variety later. For now, just not negative.
+    }
+
+    [Test]
+    public void GetCell_OutOfBounds_ReturnsEmptyCell()
+    {
+        MapCell cell = _gameMap.GetCell(-5, -5);
+        Assert.That(cell.DisplayChar, Is.EqualTo('.'));
+        Assert.That(cell.IsWall, Is.False);
+    }
+
+    [Test]
+    public void SetCell_OutOfBounds_DoesNotChangeMap()
+    {
+        MapCell before = _gameMap.GetCell(1, 1);
+        _gameMap.SetCell(-1, -1, MapCell.Wall());
+        Assert.That(_gameMap.GetCell(1, 1), Is.EqualTo(before));
     }
 }

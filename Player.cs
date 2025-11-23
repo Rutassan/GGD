@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
+using System; // For Console.WriteLine
 
 public class Player
 {
@@ -19,21 +20,25 @@ public class Player
     }
 
     [ExcludeFromCodeCoverage]
-    public void Draw(int fontSize)
+    public void Draw(int fontSize, int cameraX, int cameraY)
     {
-        Raylib.DrawText(Character.ToString(), X * fontSize, Y * fontSize, fontSize, Color);
+        // Отрисовываем игрока, смещенного относительно позиции камеры
+        Raylib.DrawText(Character.ToString(), (X - cameraX) * fontSize, (Y - cameraY) * fontSize, fontSize, Color);
     }
 
-    public virtual void Move(int dx, int dy, GameMap map)
+    public virtual bool Move(int dx, int dy, GameMap map)
     {
         int newX = X + dx;
         int newY = Y + dy;
-
-        if (!map.IsWall(newX, newY))
+        bool isWall = map.IsWall(newX, newY);
+        // Console.WriteLine($"[Player.Move] From ({X},{Y}) with (dx:{dx},dy:{dy}) to ({newX},{newY}). IsWall: {isWall}");
+        if (!isWall)
         {
             X = newX;
             Y = newY;
+            return true;
         }
+        return false;
     }
 
     public void Mine(GameMap map)

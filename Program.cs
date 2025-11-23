@@ -2,6 +2,8 @@ using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 using System; // Для Math.Min
 using System.Text; // Для StringBuilder, если понадобится, но пока не вижу необходимости.
+using System.Net.Sockets;
+using System.IO;
 
 [ExcludeFromCodeCoverage]
 public class Program
@@ -16,9 +18,22 @@ public class Program
 
     public static void Main()
     {
+        if (!IsDisplayAvailable())
+        {
+            Console.Error.WriteLine("Графический дисплей недоступен (DISPLAY/WAYLAND_DISPLAY). Запустите в среде с X11/Wayland или настройте виртуальный дисплей.");
+            return;
+        }
+
         // Устанавливаем флаг для изменения размера окна (ConfigFlags.FLAG_WINDOW_RESIZABLE = 4)
         Raylib.SetConfigFlags((ConfigFlags)4); 
-        Raylib.InitWindow(screenWidth, screenHeight, "ASCII Game v0.03 (Manual Controlled)"); 
+        Raylib.InitWindow(screenWidth, screenHeight, "ASCII Game v0.04 (Manual Controlled)"); 
+
+        if (!Raylib.IsWindowReady())
+        {
+            Console.Error.WriteLine("Не удалось открыть окно Raylib. Проверьте, что доступен дисплей (DISPLAY/WAYLAND_DISPLAY) или запустите с графической сессией.");
+            return;
+        }
+
         Raylib.SetTargetFPS(60);
 
         Player player = new Player(5, 5, '@', new Color(0, 255, 0, 255)); 
@@ -50,25 +65,40 @@ public class Program
                 if (currentController == manualController)
                 {
                     currentController = aiController;
-                    Raylib.SetWindowTitle("ASCII Game v0.03 (AI Controlled)"); 
+                    Raylib.SetWindowTitle("ASCII Game v0.04 (AI Controlled)"); 
                 }
                 else
                 {
                     currentController = manualController;
-                    Raylib.SetWindowTitle("ASCII Game v0.03 (Manual Controlled)"); 
+                    Raylib.SetWindowTitle("ASCII Game v0.04 (Manual Controlled)"); 
                 }
             }
 
             currentController.Update(player, gameMap);
 
-            int charSizeHeight = screenHeight / GameMap.MapHeight;
-            int charSizeWidth = screenWidth / GameMap.MapWidth;
-            int charSize = Math.Min(charSizeHeight, charSizeWidth);
+            int targetCharWidth = screenWidth / GameMap.MapWidth;
+            int targetCharHeight = screenHeight / GameMap.MapHeight;
+            int charSize = Math.Max(1, Math.Min(targetCharWidth, targetCharHeight));
+
+            // Ensure a minimum char size for readability
+            if (charSize < 8) charSize = 8; // Arbitrary minimum
+
+            int visibleMapWidth = Math.Max(1, Math.Min(GameMap.MapWidth, screenWidth / charSize));
+            int visibleMapHeight = Math.Max(1, Math.Min(GameMap.MapHeight, screenHeight / charSize));
+
+            // Камера следит за игроком
+            int cameraX = player.X - visibleMapWidth / 2;
+            int cameraY = player.Y - visibleMapHeight / 2;
+
+            // Ограничиваем камеру пределами карты
+            cameraX = Math.Clamp(cameraX, 0, Math.Max(0, GameMap.MapWidth - visibleMapWidth));
+            cameraY = Math.Clamp(cameraY, 0, Math.Max(0, GameMap.MapHeight - visibleMapHeight));
+
 
             Raylib.BeginDrawing();
             Raylib.ClearBackground(new Color(0, 0, 0, 255));
-            gameMap.Draw(charSize);
-            player.Draw(charSize);
+            gameMap.Draw(charSize, cameraX, cameraY, visibleMapWidth, visibleMapHeight);
+            player.Draw(charSize, cameraX, cameraY);
 
             // HUD для инвентаря
             int hudY = 10;
@@ -84,6 +114,42 @@ public class Program
         }
 
         Raylib.CloseWindow();
+    }
+
+    private static bool IsDisplayAvailable()
+    {
+        // На Linux пытаемся проверить доступность сокета X11/Wayland, чтобы избежать падения raylib
+        if (OperatingSystem.IsLinux())
+        {
+            string? display = Environment.GetEnvironmentVariable("DISPLAY");
+            string? wayland = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY");
+            if (string.IsNullOrEmpty(display) && string.IsNullOrEmpty(wayland))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(display) && display.StartsWith(":"))
+            {
+                string dispNumberPart = display.TrimStart(':').Split('.')[0];
+                if (int.TryParse(dispNumberPart, out int dispNumber))
+                {
+                    string socketPath = $"/tmp/.X11-unix/X{dispNumber}";
+                    if (!File.Exists(socketPath)) return false;
+                    try
+                    {
+                        using Socket socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                        socket.Connect(new UnixDomainSocketEndPoint(socketPath));
+                        return true;
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true; // Windows/macOS или Wayland без явной проверки считаем доступными
     }
 
     private static void ToggleFullscreenMode()

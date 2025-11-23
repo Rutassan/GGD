@@ -1,11 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 using System; // Для Random
 
 public class GameMap
 {
     private MapCell[,] _mapCells; 
-    public const int MapWidth = 20; 
-    public const int MapHeight = 10; // Исправлено
+    public const int MapWidth = 80;
+    public const int MapHeight = 30; // Исправлено
 
     private Random _random = new Random(); 
 
@@ -72,14 +73,19 @@ public class GameMap
     }
 
 
-    public void Draw(int fontSize)
+    [ExcludeFromCodeCoverage] // Графический вывод не тестируем
+    public void Draw(int fontSize, int cameraX, int cameraY, int visibleMapWidth, int visibleMapHeight)
     {
-        for (int y = 0; y < MapHeight; y++)
+        for (int y = cameraY; y < cameraY + visibleMapHeight; y++)
         {
-            for (int x = 0; x < MapWidth; x++)
+            for (int x = cameraX; x < cameraX + visibleMapWidth; x++)
             {
-                MapCell cell = _mapCells[y, x];
-                Raylib.DrawText(cell.DisplayChar.ToString(), x * fontSize, y * fontSize, fontSize, cell.CellColor);
+                if (x >= 0 && x < MapWidth && y >= 0 && y < MapHeight) // Проверка границ карты
+                {
+                    MapCell cell = _mapCells[y, x];
+                    // Отрисовываем тайл, смещенный относительно позиции камеры
+                    Raylib.DrawText(cell.DisplayChar.ToString(), (x - cameraX) * fontSize, (y - cameraY) * fontSize, fontSize, cell.CellColor);
+                }
             }
         }
     }

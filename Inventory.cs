@@ -39,4 +39,9 @@ public class Inventory
     {
         return Resources.ContainsKey(resourceType) && Resources[resourceType] >= count;
     }
+
+    public void Clear()
+    {
+        Resources.Clear();
+    }
 }
