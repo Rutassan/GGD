@@ -202,7 +202,7 @@ public class PlayerTests
     public void UpdateHunger_DecreasesOverTime()
     {
         int initial = _player.Hunger;
-        for (int i = 0; i < Player.MaxHunger; i++)
+        for (int i = 0; i < Player.HungerDecayInterval + 1; i++)
         {
             _player.UpdateHunger();
         }
@@ -237,5 +237,38 @@ public class PlayerTests
         Assert.That(result, Is.True);
         Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
         Assert.That(_gameMap.HasDoorAt(_player.X, _player.Y), Is.True);
+    }
+
+    [Test]
+    public void UpdateSurvivalStats_WhenFreezing_DecreasesHealth()
+    {
+        int initialHealth = _player.Health;
+        _player.IsFreezing = true;
+        for (int i = 0; i <= Player.FreezeDamageInterval; i++)
+        {
+            _player.UpdateSurvivalStats(false);
+        }
+        Assert.That(_player.Health, Is.LessThan(initialHealth));
+    }
+
+    [Test]
+    public void UpdateSurvivalStats_WhenWarmAndFed_RegeneratesHealth()
+    {
+        _player.TakeDamage(5);
+        int healthAfterDamage = _player.Health;
+        for (int i = 0; i <= Player.HealthRegenInterval; i++)
+        {
+            _player.IsFreezing = false;
+            _player.UpdateSurvivalStats(true);
+        }
+        Assert.That(_player.Health, Is.GreaterThan(healthAfterDamage));
+    }
+
+    [Test]
+    public void RestoreHealth_DoesNotExceedMax()
+    {
+        _player.TakeDamage(10);
+        _player.RestoreHealth(20);
+        Assert.That(_player.Health, Is.EqualTo(Player.MaxHealth));
     }
 }

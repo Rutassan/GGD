@@ -10,13 +10,20 @@ public class Player
     public Color Color { get; set; }
     public Inventory PlayerInventory { get; private set; }
     public bool IsFreezing { get; set; } // Новое свойство для состояния "замерзания"
-    private const int HungerDecayInterval = 60;
+    public const int HungerDecayInterval = 1080;
     private const int HungerRecoveryPerFood = 30;
     public const int MaxHunger = 100;
     private int _hungerDecayCounter;
     public int Hunger { get; private set; }
     public bool IsStarving => Hunger <= 0;
     public bool IsHungry => Hunger <= 30;
+    public const int MaxHealth = 100;
+    public int Health { get; private set; }
+    public bool IsAlive => Health > 0;
+    public const int FreezeDamageInterval = 180;
+    public const int HealthRegenInterval = 240;
+    private int _freezeDamageCounter;
+    private int _healthRegenCounter;
 
     public Player(int x, int y, char character, Color color)
     {
@@ -28,6 +35,9 @@ public class Player
         IsFreezing = false; // Инициализируем по умолчанию
         Hunger = MaxHunger;
         _hungerDecayCounter = 0;
+        Health = MaxHealth;
+        _freezeDamageCounter = 0;
+        _healthRegenCounter = 0;
     }
 
     [ExcludeFromCodeCoverage]
@@ -86,6 +96,38 @@ public class Player
         }
     }
 
+    public void UpdateSurvivalStats(bool isInside)
+    {
+        UpdateHunger();
+
+        if (IsFreezing && !isInside)
+        {
+            _healthRegenCounter = 0;
+            _freezeDamageCounter++;
+            if (_freezeDamageCounter >= FreezeDamageInterval)
+            {
+                TakeDamage(1);
+                _freezeDamageCounter = 0;
+            }
+            return;
+        }
+
+        _freezeDamageCounter = 0;
+        if (Hunger > MaxHunger / 2)
+        {
+            _healthRegenCounter++;
+            if (_healthRegenCounter >= HealthRegenInterval && Health < MaxHealth)
+            {
+                RestoreHealth(1);
+                _healthRegenCounter = 0;
+            }
+        }
+        else
+        {
+            _healthRegenCounter = 0;
+        }
+    }
+
     public bool Build(GameMap map, string resourceType, int targetX, int targetY)
     {
         // Пока что строим только стены из "Stone"
@@ -116,5 +158,23 @@ public class Player
             return true;
         }
         return false;
+    }
+
+    public void TakeDamage(int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+        Health = Math.Max(0, Health - amount);
+    }
+
+    public void RestoreHealth(int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+        Health = Math.Min(MaxHealth, Health + amount);
     }
 }

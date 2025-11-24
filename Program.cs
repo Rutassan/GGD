@@ -17,9 +17,12 @@ public class Program
     private static int previousScreenWidth = InitialScreenWidth;
     private static int previousScreenHeight = InitialScreenHeight;
 
-    public const int DayDuration = 3600;
-    public const int NightDuration = 1800;
+    public const int DayDuration = 18000;
+    public const int NightDuration = 18000;
     public const int TotalDayNightDuration = DayDuration + NightDuration;
+    private const float DayTemperature = 20f;
+    private const float NightTemperature = -5f;
+    private const float FreezingThresholdTemperature = 0f;
     private static long gameTime = 0;
 
     private static float cameraX = 0f;
@@ -78,9 +81,9 @@ public class Program
         while (!Raylib.WindowShouldClose())
         {
             gameTime++;
-            player.UpdateHunger();
-
-            bool isDay = (gameTime % TotalDayNightDuration) < DayDuration;
+            long currentCycleTime = gameTime % TotalDayNightDuration;
+            bool isDay = currentCycleTime < DayDuration;
+            float currentTemperature = CalculateTemperature(currentCycleTime);
             bool isInside = gameMap.IsInside(player.X, player.Y);
 
             if (Raylib.IsWindowResized())
@@ -108,7 +111,8 @@ public class Program
                 }
             }
 
-            player.IsFreezing = !isDay && !isInside;
+            player.IsFreezing = currentTemperature < FreezingThresholdTemperature && !isInside;
+            player.UpdateSurvivalStats(isInside);
             currentController.Update(player, gameMap, isDay, gameTime);
 
             float deltaTime = Raylib.GetFrameTime();
@@ -149,7 +153,8 @@ public class Program
                 : new Color(255, 255, 255, 255);
 
             ShelterInfo shelterInfo = gameMap.AnalyzeShelter(player.X, player.Y);
-            DrawTopPanel(uiFont, screenWidth, player, isDay, dayNumber, hungerColor, shelterInfo);
+            string clockTime = FormatClock(currentCycleTime);
+            DrawTopPanel(uiFont, screenWidth, player, isDay, dayNumber, clockTime, currentTemperature, hungerColor, shelterInfo);
             DrawBottomPanel(uiFont, screenWidth, screenHeight, player);
 
             Raylib.EndDrawing();
@@ -164,6 +169,38 @@ public class Program
         int baseSize = Math.Max(MinTileSize, Math.Min(width / 32, height / 18));
         int scaledSize = (int)Math.Round(baseSize * zoom);
         return Math.Clamp(scaledSize, MinTileSize, MaxTileSize);
+    }
+
+    private static float CalculateTemperature(long cycleTime)
+    {
+        if (cycleTime < DayDuration)
+        {
+            float progress = (float)cycleTime / DayDuration;
+            return Lerp(NightTemperature, DayTemperature, progress);
+        }
+
+        float nightProgress = (float)(cycleTime - DayDuration) / NightDuration;
+        return Lerp(DayTemperature, NightTemperature, nightProgress);
+    }
+
+    private static string FormatClock(long cycleTime)
+    {
+        double ratio = (double)cycleTime / TotalDayNightDuration;
+        int totalMinutes = (int)Math.Floor(ratio * 24 * 60) % (24 * 60);
+        if (totalMinutes < 0)
+        {
+            totalMinutes += 24 * 60;
+        }
+
+        int hours = totalMinutes / 60;
+        int minutes = totalMinutes % 60;
+        return $"{hours:D2}:{minutes:D2}";
+    }
+
+    private static float Lerp(float start, float end, float amount)
+    {
+        float clamped = Math.Clamp(amount, 0f, 1f);
+        return start + (end - start) * clamped;
     }
 
     private static void ClampCamera(int visibleWidth, int visibleHeight)
@@ -203,42 +240,47 @@ public class Program
         cameraY += dy;
     }
 
-    private static void DrawTopPanel(Font uiFont, int width, Player player, bool isDay, long dayNumber, Color hungerColor, ShelterInfo shelterInfo)
+    private static void DrawTopPanel(Font uiFont, int width, Player player, bool isDay, long dayNumber, string clockTime, float currentTemperature, Color hungerColor, ShelterInfo shelterInfo)
     {
         Raylib.DrawRectangle(0, 0, width, PanelTopHeight, new Color(10, 10, 20, 220));
         
         int leftX = 14;
         int rightX = width / 2 + 10;
         int line1Y = 10;
-        int line2Y = 35;
-        int line3Y = 58;
+        int leftSpacing = 22;
+        int rightSpacing = 24;
         
         // Левая колонка
         string timeLabel = isDay ? "День" : "Ночь";
-        Raylib.DrawTextEx(uiFont, $"День {dayNumber} | {timeLabel}", new Vector2(leftX, line1Y), 20, 0, new Color(255, 255, 255, 255));
-        
-        string hungerText = $"Сытость: {player.Hunger}/{Player.MaxHunger}";
-        Raylib.DrawTextEx(uiFont, hungerText, new Vector2(leftX, line2Y), 18, 0, hungerColor);
-        
-        string status = player.IsFreezing ? "⚠ Замерзает" : player.IsStarving ? "⚠ Голод" : "✓ Стабильно";
-        Color statusColor = player.IsFreezing || player.IsStarving ? new Color(255, 100, 100, 255) : new Color(100, 255, 100, 255);
-        Raylib.DrawTextEx(uiFont, status, new Vector2(leftX, line3Y), 16, 0, statusColor);
+        Raylib.DrawTextEx(uiFont, $"{timeLabel} {dayNumber}", new Vector2(leftX, line1Y), 20, 0, new Color(255, 255, 255, 255));
+        Raylib.DrawTextEx(uiFont, $"Время: {clockTime}", new Vector2(leftX, line1Y + leftSpacing), 18, 0, new Color(210, 230, 255, 255));
+        Raylib.DrawTextEx(uiFont, $"Температура: {currentTemperature:F1}°C", new Vector2(leftX, line1Y + leftSpacing * 2), 18, 0, new Color(190, 220, 255, 255));
+        Raylib.DrawTextEx(uiFont, $"Сытость: {player.Hunger}/{Player.MaxHunger}", new Vector2(leftX, line1Y + leftSpacing * 3), 18, 0, hungerColor);
         
         // Правая колонка - укрытие
-        string shelterLine = shelterInfo.IsInside ? $"Укрытие: {shelterInfo.Classification}" : "Укрытие: больш. дом";
-        Raylib.DrawTextEx(uiFont, shelterLine, new Vector2(rightX, line1Y), 18, 0, new Color(190, 210, 255, 255));
-        
+        string healthText = $"Здоровье: {player.Health}/{Player.MaxHealth}";
+        float healthRatio = player.Health / (float)Player.MaxHealth;
+        Color healthColor = healthRatio < 0.3f ? new Color(255, 120, 120, 255)
+            : healthRatio < 0.7f ? new Color(255, 200, 120, 255)
+            : new Color(150, 255, 170, 255);
+        Raylib.DrawTextEx(uiFont, healthText, new Vector2(rightX, line1Y), 18, 0, healthColor);
+
+        string status = player.IsFreezing ? "⚠ Замерзает" : player.IsStarving ? "⚠ Голод" : player.Health < Player.MaxHealth ? "▲ Восстановление" : "✓ Стабильно";
+        Color statusColor = player.IsFreezing || player.IsStarving ? new Color(255, 100, 100, 255) : new Color(100, 255, 100, 255);
+        Raylib.DrawTextEx(uiFont, status, new Vector2(rightX, line1Y + rightSpacing), 16, 0, statusColor);
+
+        int shelterLineY = line1Y + rightSpacing * 2;
+        string shelterLine = shelterInfo.IsInside ? $"Укрытие: {shelterInfo.Classification}" : "Укрытие: На улице";
+        Raylib.DrawTextEx(uiFont, shelterLine, new Vector2(rightX, shelterLineY), 18, 0, new Color(190, 210, 255, 255));
+        shelterLineY += 18;
         if (shelterInfo.IsInside)
         {
             string areaText = $"(площадь: {shelterInfo.Area})";
-            Raylib.DrawTextEx(uiFont, areaText, new Vector2(rightX, line2Y), 16, 0, new Color(180, 200, 245, 255));
-            
+            Raylib.DrawTextEx(uiFont, areaText, new Vector2(rightX, shelterLineY), 16, 0, new Color(180, 200, 245, 255));
+            shelterLineY += 18;
+
             string doors = shelterInfo.HasDoor ? $"Двери: {shelterInfo.DoorCount}" : "Дверей нет";
-            Raylib.DrawTextEx(uiFont, doors, new Vector2(rightX, line3Y), 16, 0, new Color(200, 200, 255, 255));
-        }
-        else
-        {
-            Raylib.DrawTextEx(uiFont, "На улице", new Vector2(rightX, line2Y), 16, 0, new Color(200, 180, 180, 255));
+            Raylib.DrawTextEx(uiFont, doors, new Vector2(rightX, shelterLineY), 16, 0, new Color(200, 200, 255, 255));
         }
     }
 
