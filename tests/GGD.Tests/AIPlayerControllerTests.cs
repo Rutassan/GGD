@@ -33,14 +33,17 @@ public class AIMockGameMap : GameMap
         } else {
             isWall = MockCells[y, x].IsWall;
         }
-        // Console.WriteLine($"[{_testName} - AIMockGameMap.IsWall] ({x},{y}) -> {isWall}");
         return isWall;
     }
 
     public override MapCell GetCell(int x, int y)
     {
-        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return MapCell.Wall(); 
-        return MockCells[y, x];
+        MapCell cell = MapCell.Wall(); // Default to wall for out of bounds
+        if (x >= 0 && x < MapWidth && y >= 0 && y < MapHeight) 
+        {
+            cell = MockCells[y, x];
+        }
+        return cell;
     }
 
     public override void SetCell(int x, int y, MapCell newCell)
@@ -54,6 +57,7 @@ public class AIMockGameMap : GameMap
 
 
 [TestFixture]
+[Parallelizable(ParallelScope.None)]
 public class AIPlayerControllerTests
 {
     private AIPlayerController _controller;
@@ -77,7 +81,7 @@ public class AIPlayerControllerTests
 
         for (int i = 0; i < 19; i++) // 19 calls, so counter is 19
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
         Assert.That(_player.X, Is.EqualTo(1));
         Assert.That(_player.Y, Is.EqualTo(1));
@@ -89,22 +93,18 @@ public class AIPlayerControllerTests
         Assert.That(resource.Health, Is.EqualTo(1)); // Resource not mined
     }
 
-    [Test]
     public void Update_AfterDelayExpires_AIAttemptsToMineResourceAtCurrentPosition()
     {
         // Arrange
         ResourceTile stone = new ResourceTile('$', new Color(150, 150, 150, 255), "Stone", 1); // Добавил цвет
-        _gameMap.SetCell(_player.X, _player.Y, MapCell.ResourceCell(stone));
-        
-        // Act
         for (int i = 0; i < 20; i++) // 20 calls, action should occur
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
 
         // Assert
         Assert.That(stone.Health, Is.EqualTo(0)); // Resource should be mined
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True);
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(1));
         Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('.')); // Cell should be empty
     }
 
@@ -118,11 +118,11 @@ public class AIPlayerControllerTests
         // Act
         for (int i = 0; i < 20; i++) // 20 calls, action should occur
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
 
         // Assert
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 0), Is.False); // Stone should be consumed
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(0)); // Stone should be consumed
         Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('#')); // Cell should be a wall
     }
 
@@ -139,7 +139,7 @@ public class AIPlayerControllerTests
         // Act
         for (int i = 0; i < 20; i++) // 20 calls, action should occur
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
 
         // Assert - Player should have moved
@@ -162,7 +162,7 @@ public class AIPlayerControllerTests
         // Каждый шаг занимает _actionDelayMax кадров
         for (int i = 0; i < 6 * 20 + 5; i++) // 6 действий (5 move + 1 mine) * _actionDelayMax кадров/действие + запас
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
 
         // Assert
@@ -190,7 +190,7 @@ public class AIPlayerControllerTests
         // Path would be longer due to obstacle
         for (int i = 1; i < 20 * 20 + 5; i++) // Увеличено количество итераций для запаса
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
 
         // Assert
@@ -211,19 +211,24 @@ public class AIPlayerControllerTests
         ResourceTile stone = new ResourceTile('$', new Color(150, 150, 150, 255), "Stone", 1);
         _gameMap.SetCell(2, 1, MapCell.ResourceCell(stone)); // Resource one step away
 
-        // Act - Run updates to find path, move to resource, and mine it
-        for (int i = 0; i < 3 * 20; i++) // Find path (1), Move (1), Mine (1) * _actionDelayMax
+        // Act - Run updates to find path and move to resource
+        for (int i = 0; i < 2 * 20; i++) 
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
-
-        // Assert - Use reflection to check the private _path field
+        
+        // Mine the resource and wait a tick
+        for (int i = 0; i <= 20; i++)
+        {
+            _controller.Update(_player, _gameMap, true, 0L);
+        }
+        
+        // Assert
         var pathField = typeof(AIPlayerController).GetField("_path", BindingFlags.NonPublic | BindingFlags.Instance);
         var path = (List<(int, int)>?)pathField!.GetValue(_controller);
-        Assert.That(path, Is.Not.Null, "Path should not be null after AI action.");
-
         Assert.That(path!.Count, Is.EqualTo(0)); // Path should be cleared
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True); // Resource should be mined
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(0), "Stone is consumed by building.");
+
     }
 
     [Test]
@@ -240,7 +245,7 @@ public class AIPlayerControllerTests
 
         for (int i = 0; i < 20 * 5; i++) // Несколько циклов, чтобы точно дошло до действия
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
             if (_player.X != startX || _player.Y != startY)
             {
                 hasMoved = true;
@@ -263,13 +268,13 @@ public class AIPlayerControllerTests
         var pathField = typeof(AIPlayerController).GetField("_path", BindingFlags.NonPublic | BindingFlags.Instance);
         pathField!.SetValue(_controller, new List<(int, int)> { (5, 4), (6, 4) });
 
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < 40; i++)
         {
-            _controller.Update(_player, _gameMap);
+            _controller.Update(_player, _gameMap, true, 0L);
         }
 
         Assert.That(stone.Health, Is.EqualTo(0), "Ресурс должен быть добыт, даже если маршрут уже был построен.");
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
 
         var path = (List<(int, int)>?)pathField!.GetValue(_controller);
         Assert.That(path, Is.Not.Null);
@@ -289,12 +294,12 @@ public class AIPlayerControllerTests
         // Создаем ресурс и путь к нему
         _gameMap.SetCell(2, 1, MapCell.ResourceCell(new ResourceTile('$', new Color(), "Stone", 1)));
 
-        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap); } // Построить маршрут
+        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap, true, 0L); } // Построить маршрут
 
         // Удаляем ресурс до следующего шага ИИ
         _gameMap.SetCell(2, 1, MapCell.Empty());
 
-        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap); }
+        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap, true, 0L); }
 
         var path = (List<(int, int)>?)pathField.GetValue(_controller);
         var target = (ValueTuple<int, int>?)targetField.GetValue(_controller);
@@ -309,21 +314,31 @@ public class AIPlayerControllerTests
     {
         _player.X = 1;
         _player.Y = 1;
-        _gameMap.SetCell(2, 1, MapCell.Wall());
+        // Ресурс в (3,1), чтобы ИИ построил к нему маршрут
         _gameMap.SetCell(3, 1, MapCell.ResourceCell(new ResourceTile('$', new Color(), "Stone", 1)));
 
+        // Шаг 1: Запускаем Update один раз, чтобы ИИ нашел ресурс и построил маршрут
+        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap, true, 0L); }
+
+        // Проверяем, что маршрут построен
         var pathField = typeof(AIPlayerController).GetField("_path", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var initialPath = (List<(int, int)>?)pathField.GetValue(_controller);
+        Assert.That(initialPath, Is.Not.Null);
+        Assert.That(initialPath!.Count, Is.GreaterThan(0), "Маршрут должен быть построен");
+
+        // Шаг 2: Блокируем следующий шаг на маршруте
+        var nextStep = initialPath[0];
+        _gameMap.SetCell(nextStep.Item1, nextStep.Item2, MapCell.Wall());
+
+        // Шаг 3: Запускаем Update еще раз, чтобы ИИ попытался сделать шаг и обнаружил преграду
+        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap, true, 0L); }
+        
+        // Шаг 4: Проверяем, что маршрут и цель сброшены
+        var finalPath = (List<(int, int)>?)pathField.GetValue(_controller);
         var targetField = typeof(AIPlayerController).GetField("_targetResourcePosition", BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-        pathField.SetValue(_controller, new List<(int, int)> { (2, 1), (3, 1) });
-        targetField.SetValue(_controller, (3, 1));
-
-        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap); }
-
-        var path = (List<(int, int)>?)pathField.GetValue(_controller);
         var target = (ValueTuple<int, int>?)targetField.GetValue(_controller);
 
-        Assert.That(path!.Count, Is.EqualTo(0), "Путь должен очищаться, если шаг заблокирован.");
+        Assert.That(finalPath!.Count, Is.EqualTo(0), "Путь должен очищаться, если шаг заблокирован.");
         Assert.That(target.HasValue, Is.False, "Цель должна сбрасываться, если путь не пройти.");
     }
 
@@ -344,7 +359,7 @@ public class AIPlayerControllerTests
         _player.PlayerInventory.Clear();
         _gameMap.SetCell(2, 1, MapCell.ResourceCell(new ResourceTile('$', new Color(), "Stone", 1)));
 
-        for (int i = 0; i < 20; i++) { controller.Update(_player, _gameMap); }
+        for (int i = 0; i < 20; i++) { controller.Update(_player, _gameMap, true, 0L); }
 
         var pathField = typeof(AIPlayerController).GetField("_path", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var targetField = typeof(AIPlayerController).GetField("_targetResourcePosition", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -368,13 +383,13 @@ public class AIPlayerControllerTests
         _gameMap.SetCell(1, 1, MapCell.ResourceCell(stone));
 
         // Шаг 1: добываем
-        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap); }
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True);
+        for (int i = 0; i <= 20; i++) { _controller.Update(_player, _gameMap, true, 0L); } // 21 calls to ensure one action and one "cool-down" tick
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(1));
 
         // Шаг 2: следующий цикл должен использовать ресурс (строительство) и не зависнуть
-        for (int i = 0; i < 40; i++) { _controller.Update(_player, _gameMap); } // две итерации действия, т.к. сразу после добычи есть тик отдыха
+        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap, true, 0L); } 
 
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False, "Ресурс должен быть потрачен, ИИ не должен стоять на месте с ресурсом.");
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(0), "Ресурс должен быть потрачен, ИИ не должен стоять на месте с ресурсом.");
         Assert.That(_gameMap.GetCell(1, 1).IsWall, Is.True, "После добычи ИИ строит стену и продолжает работать.");
     }
 

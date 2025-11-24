@@ -16,6 +16,12 @@ public class Program
     private static int previousScreenWidth = InitialScreenWidth;
     private static int previousScreenHeight = InitialScreenHeight;
 
+    // Константы для цикла дня и ночи (в кадрах)
+    public const int DayDuration = 3600; // 60 секунд * 60 кадров/сек = 3600 кадров
+    public const int NightDuration = 1800; // 30 секунд * 60 кадров/сек = 1800 кадров
+    public const int TotalDayNightDuration = DayDuration + NightDuration;
+    private static long gameTime = 0; // Глобальный счетчик игрового времени
+
     public static void Main()
     {
         if (!IsDisplayAvailable())
@@ -26,7 +32,7 @@ public class Program
 
         // Устанавливаем флаг для изменения размера окна (ConfigFlags.FLAG_WINDOW_RESIZABLE = 4)
         Raylib.SetConfigFlags((ConfigFlags)4); 
-        Raylib.InitWindow(screenWidth, screenHeight, "ASCII Game v0.04 (Manual Controlled)"); 
+        Raylib.InitWindow(screenWidth, screenHeight, "ASCII Game v0.05 (Manual Controlled)"); 
 
         if (!Raylib.IsWindowReady())
         {
@@ -46,6 +52,11 @@ public class Program
 
         while (!Raylib.WindowShouldClose())
         {
+            gameTime++; // Увеличиваем глобальный счетчик времени
+
+            // Определяем, день сейчас или ночь
+            bool isDay = (gameTime % TotalDayNightDuration) < DayDuration;
+
             // Обновляем размеры экрана, если окно было изменено
             if (Raylib.IsWindowResized())
             {
@@ -65,16 +76,19 @@ public class Program
                 if (currentController == manualController)
                 {
                     currentController = aiController;
-                    Raylib.SetWindowTitle("ASCII Game v0.04 (AI Controlled)"); 
+                    Raylib.SetWindowTitle("ASCII Game v0.05 (AI Controlled)"); 
                 }
                 else
                 {
                     currentController = manualController;
-                    Raylib.SetWindowTitle("ASCII Game v0.04 (Manual Controlled)"); 
+                    Raylib.SetWindowTitle("ASCII Game v0.05 (Manual Controlled)"); 
                 }
             }
 
-            currentController.Update(player, gameMap);
+            currentController.Update(player, gameMap, isDay, gameTime);
+
+            // Логика "холода"
+            player.IsFreezing = !isDay && !gameMap.IsInside(player.X, player.Y);
 
             int targetCharWidth = screenWidth / GameMap.MapWidth;
             int targetCharHeight = screenHeight / GameMap.MapHeight;
@@ -95,8 +109,10 @@ public class Program
             cameraY = Math.Clamp(cameraY, 0, Math.Max(0, GameMap.MapHeight - visibleMapHeight));
 
 
+            Color backgroundColor = isDay ? new Color(135, 206, 235, 255) : new Color(25, 25, 112, 255); // SKYBLUE или MIDNIGHTBLUE
+
             Raylib.BeginDrawing();
-            Raylib.ClearBackground(new Color(0, 0, 0, 255));
+            Raylib.ClearBackground(backgroundColor);
             gameMap.Draw(charSize, cameraX, cameraY, visibleMapWidth, visibleMapHeight);
             player.Draw(charSize, cameraX, cameraY);
 
@@ -109,6 +125,10 @@ public class Program
                 Raylib.DrawText($"{item.Key}: {item.Value}", screenWidth - 200, hudY, 20, new Color(255, 255, 255, 255)); // WHITE
                 hudY += 25;
             }
+
+            // HUD для цикла дня/ночи
+            string timeOfDayText = isDay ? "Day" : "Night";
+            Raylib.DrawText($"Time: {timeOfDayText}", 10, 10, 20, new Color(255, 255, 255, 255)); // WHITE
 
             Raylib.EndDrawing();
         }

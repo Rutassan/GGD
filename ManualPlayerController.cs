@@ -9,7 +9,7 @@ public class ManualPlayerController : IPlayerController
         _inputService = inputService;
     }
 
-    public void Update(Player player, GameMap map)
+    public void Update(Player player, GameMap map, bool isDay, long gameTime)
     {
         // Movement
         if (_inputService.IsKeyPressed((KeyboardKey)262)) // KEY_RIGHT
@@ -38,7 +38,7 @@ public class ManualPlayerController : IPlayerController
         // Building (Stone Wall for now)
         if (_inputService.IsKeyPressed((KeyboardKey)66)) // KEY_B
         {
-            player.Build(map, "Stone");
+            player.Build(map, "Stone", player.X, player.Y);
         }
     }
 }

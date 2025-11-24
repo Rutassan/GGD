@@ -121,10 +121,8 @@ public class PlayerTests
     {
         // Arrange
         _player.PlayerInventory.AddItem("Stone", 5);
-        _gameMap.SetCell(_player.X, _player.Y, MapCell.Empty()); // Ensure cell is empty
-
         // Act
-        bool result = _player.Build(_gameMap, "Stone");
+        bool result = _player.Build(_gameMap, "Stone", _player.X, _player.Y);
 
         // Assert
         Assert.That(result, Is.True);
@@ -142,10 +140,8 @@ public class PlayerTests
         if (_player.PlayerInventory.Resources.ContainsKey("Stone")) {
             _player.PlayerInventory.RemoveItem("Stone", _player.PlayerInventory.Resources["Stone"]);
         }
-        _gameMap.SetCell(_player.X, _player.Y, MapCell.Empty());
-
         // Act
-        bool result = _player.Build(_gameMap, "Stone");
+        bool result = _player.Build(_gameMap, "Stone", _player.X, _player.Y);
 
         // Assert
         Assert.That(result, Is.False);
@@ -161,7 +157,7 @@ public class PlayerTests
         _gameMap.SetCell(_player.X, _player.Y, MapCell.Wall()); // Cell is a wall
 
         // Act
-        bool result = _player.Build(_gameMap, "Stone");
+        bool result = _player.Build(_gameMap, "Stone", _player.X, _player.Y);
 
         // Assert
         Assert.That(result, Is.False);

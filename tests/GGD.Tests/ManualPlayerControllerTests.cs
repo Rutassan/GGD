@@ -71,7 +71,7 @@ public class ManualPlayerControllerTests
     public void Update_NoKeyPressed_DoesNotMovePlayer()
     {
         _mockInputService.KeyPressed = null; // No key pressed
-        _controller.Update(_player, _gameMap);
+        _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(0));
     }
     
@@ -79,7 +79,7 @@ public class ManualPlayerControllerTests
     public void Update_RightKeyPressed_MovesPlayerRight()
     {
         _mockInputService.KeyPressed = (KeyboardKey)262; // KEY_RIGHT
-        _controller.Update(_player, _gameMap);
+        _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(1));
         Assert.That(_player.LastDy, Is.EqualTo(0));
@@ -89,7 +89,7 @@ public class ManualPlayerControllerTests
     public void Update_LeftKeyPressed_MovesPlayerLeft()
     {
         _mockInputService.KeyPressed = (KeyboardKey)263; // KEY_LEFT
-        _controller.Update(_player, _gameMap);
+        _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(-1));
         Assert.That(_player.LastDy, Is.EqualTo(0));
@@ -99,7 +99,7 @@ public class ManualPlayerControllerTests
     public void Update_UpKeyPressed_MovesPlayerUp()
     {
         _mockInputService.KeyPressed = (KeyboardKey)265; // KEY_UP
-        _controller.Update(_player, _gameMap);
+        _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(0));
         Assert.That(_player.LastDy, Is.EqualTo(-1));
@@ -109,7 +109,7 @@ public class ManualPlayerControllerTests
     public void Update_DownKeyPressed_MovesPlayerDown()
     {
         _mockInputService.KeyPressed = (KeyboardKey)264; // KEY_DOWN
-        _controller.Update(_player, _gameMap);
+        _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(0));
         Assert.That(_player.LastDy, Is.EqualTo(1));
@@ -124,7 +124,7 @@ public class ManualPlayerControllerTests
         map.SetCell(1, 1, MapCell.ResourceCell(stone));
 
         _mockInputService.KeyPressed = (KeyboardKey)77; // KEY_M
-        _controller.Update(player, map);
+        _controller.Update(player, map, true, 0L);
 
         Assert.That(stone.Health, Is.EqualTo(0));
         Assert.That(player.PlayerInventory.HasItem("Stone", 1), Is.True);
@@ -141,7 +141,7 @@ public class ManualPlayerControllerTests
         player.PlayerInventory.AddItem("Stone", 1);
 
         _mockInputService.KeyPressed = (KeyboardKey)66; // KEY_B
-        _controller.Update(player, map);
+        _controller.Update(player, map, true, 0L);
 
         Assert.That(player.PlayerInventory.HasItem("Stone", 1), Is.False);
         Assert.That(map.GetCell(2, 2).IsWall, Is.True);

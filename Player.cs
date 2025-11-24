@@ -9,6 +9,7 @@ public class Player
     public char Character { get; set; }
     public Color Color { get; set; }
     public Inventory PlayerInventory { get; private set; }
+    public bool IsFreezing { get; set; } // Новое свойство для состояния "замерзания"
 
     public Player(int x, int y, char character, Color color)
     {
@@ -17,6 +18,7 @@ public class Player
         Character = character;
         Color = color;
         PlayerInventory = new Inventory();
+        IsFreezing = false; // Инициализируем по умолчанию
     }
 
     [ExcludeFromCodeCoverage]
@@ -31,7 +33,6 @@ public class Player
         int newX = X + dx;
         int newY = Y + dy;
         bool isWall = map.IsWall(newX, newY);
-        // Console.WriteLine($"[Player.Move] From ({X},{Y}) with (dx:{dx},dy:{dy}) to ({newX},{newY}). IsWall: {isWall}");
         if (!isWall)
         {
             X = newX;
@@ -55,17 +56,17 @@ public class Player
         }
     }
 
-    public bool Build(GameMap map, string resourceType)
+    public bool Build(GameMap map, string resourceType, int targetX, int targetY)
     {
         // Пока что строим только стены из "Stone"
         if (resourceType == "Stone" && PlayerInventory.HasItem("Stone", 1))
         {
-            // Проверяем, что текущая ячейка пуста или не является стеной, чтобы можно было строить
-            MapCell currentCell = map.GetCell(X, Y);
-            if (!currentCell.IsWall && currentCell.Resource == null)
+            // Проверяем, что целевая ячейка пуста или не является стеной, чтобы можно было строить
+            MapCell targetCell = map.GetCell(targetX, targetY);
+            if (!targetCell.IsWall && targetCell.Resource == null) // Проверяем, что ресурс null, чтобы не заменять его
             {
-                PlayerInventory.RemoveItem("Stone", 1);
-                map.SetCell(X, Y, MapCell.Wall()); // Строим стену
+                PlayerInventory.RemoveItem("Stone", 1); // THIS SHOULD REMOVE THE STONE
+                map.SetCell(targetX, targetY, MapCell.Wall()); // Строим стену
                 return true;
             }
         }
