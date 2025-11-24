@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
 
@@ -128,33 +129,59 @@ public class Player
         }
     }
 
-    public bool Build(GameMap map, string resourceType, int targetX, int targetY)
+    public bool Build(GameMap map, string buildingBlockType, int targetX, int targetY)
     {
-        // Пока что строим только стены из "Stone"
-        if (resourceType == "Stone" && PlayerInventory.HasItem("Stone", 1))
+        if (!PlayerInventory.HasItem(buildingBlockType, 1))
         {
-            // Проверяем, что целевая ячейка пуста или не является стеной, чтобы можно было строить
-            MapCell targetCell = map.GetCell(targetX, targetY);
-            if (!targetCell.IsWall && targetCell.Resource == null) // Проверяем, что ресурс null, чтобы не заменять его
-            {
-                PlayerInventory.RemoveItem("Stone", 1); // THIS SHOULD REMOVE THE STONE
-                map.SetCell(targetX, targetY, MapCell.Wall()); // Строим стену
-                return true;
-            }
+            return false;
         }
-        return false;
+
+        MapCell targetCell = map.GetCell(targetX, targetY);
+        if (targetCell.IsWall || targetCell.Resource != null || targetCell.HasDoor)
+        {
+            return false;
+        }
+
+        MapCell newCell = buildingBlockType switch
+        {
+            "StoneWall" => MapCell.BuiltStoneWall(),
+            _ => MapCell.Wall()
+        };
+
+        PlayerInventory.RemoveItem(buildingBlockType, 1);
+        map.SetCell(targetX, targetY, newCell);
+        return true;
     }
 
-    public bool BuildDoor(GameMap map, int targetX, int targetY)
+    public bool Craft(string craftedItem, IReadOnlyDictionary<string, int> recipe)
     {
-        if (!PlayerInventory.HasItem("Stone", 1))
+        foreach (var (resourceType, amount) in recipe)
+        {
+            if (!PlayerInventory.HasItem(resourceType, amount))
+            {
+                return false;
+            }
+        }
+
+        foreach (var (resourceType, amount) in recipe)
+        {
+            PlayerInventory.RemoveItem(resourceType, amount);
+        }
+
+        PlayerInventory.AddItem(craftedItem, 1);
+        return true;
+    }
+
+    public bool BuildDoor(GameMap map, int targetX, int targetY, string buildingBlockType = "StoneWall")
+    {
+        if (!PlayerInventory.HasItem(buildingBlockType, 1))
         {
             return false;
         }
 
         if (map.PlaceDoor(targetX, targetY))
         {
-            PlayerInventory.RemoveItem("Stone", 1);
+            PlayerInventory.RemoveItem(buildingBlockType, 1);
             return true;
         }
         return false;

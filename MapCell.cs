@@ -33,4 +33,6 @@ public class MapCell
     public static MapCell ResourceCell(ResourceTile resource) => new MapCell(resource.DisplayChar, resource.TileColor, false, resource);
 
     public static MapCell DoorCell(DoorTile door) => new MapCell(door.CurrentDisplayChar, door.CurrentColor, false, null, door);
+
+    public static MapCell BuiltStoneWall() => new MapCell('█', new Color(100, 100, 100, 255), true);
 }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using Raylib_cs;
 
@@ -153,14 +155,14 @@ public class PlayerTests
     public void Build_WithEnoughResourcesAndEmptyCell_BuildsWallAndRemovesResource()
     {
         // Arrange
-        _player.PlayerInventory.AddItem("Stone", 5);
+        _player.PlayerInventory.AddItem("StoneWall", 5);
         // Act
-        bool result = _player.Build(_gameMap, "Stone", _player.X, _player.Y);
+        bool result = _player.Build(_gameMap, "StoneWall", _player.X, _player.Y);
 
         // Assert
         Assert.That(result, Is.True);
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 4), Is.True); // 1 less stone
-        Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('#')); // Cell is now a wall
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 4), Is.True); // 1 less stone wall
+        Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('█')); // Cell is now a stone wall
         Assert.That(_gameMap.GetCell(_player.X, _player.Y).IsWall, Is.True);
     }
 
@@ -168,17 +170,15 @@ public class PlayerTests
     public void Build_WithoutEnoughResources_DoesNotBuildAndReturnsFalse()
     {
         // Arrange
-        // _player.PlayerInventory.AddItem("Stone", 0); // No stone (this line actually adds "Stone" with 0, so HasItem returns True)
-        // Ensure "Stone" is not in inventory at all, or has less than 1.
-        if (_player.PlayerInventory.Resources.ContainsKey("Stone")) {
-            _player.PlayerInventory.RemoveItem("Stone", _player.PlayerInventory.Resources["Stone"]);
+        if (_player.PlayerInventory.Resources.ContainsKey("StoneWall")) {
+            _player.PlayerInventory.RemoveItem("StoneWall", _player.PlayerInventory.Resources["StoneWall"]);
         }
         // Act
-        bool result = _player.Build(_gameMap, "Stone", _player.X, _player.Y);
+        bool result = _player.Build(_gameMap, "StoneWall", _player.X, _player.Y);
 
         // Assert
         Assert.That(result, Is.False);
-        Assert.That(_player.PlayerInventory.Resources.ContainsKey("Stone"), Is.False); // Should not have "Stone" in inventory
+        Assert.That(_player.PlayerInventory.Resources.ContainsKey("StoneWall"), Is.False); // Should not have "StoneWall" in inventory
         Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('.')); // Cell remains empty
     }
 
@@ -186,16 +186,66 @@ public class PlayerTests
     public void Build_OnOccupiedCell_DoesNotBuildAndReturnsFalse()
     {
         // Arrange
-        _player.PlayerInventory.AddItem("Stone", 1);
+        _player.PlayerInventory.AddItem("StoneWall", 1);
         _gameMap.SetCell(_player.X, _player.Y, MapCell.Wall()); // Cell is a wall
 
         // Act
-        bool result = _player.Build(_gameMap, "Stone", _player.X, _player.Y);
+        bool result = _player.Build(_gameMap, "StoneWall", _player.X, _player.Y);
 
         // Assert
         Assert.That(result, Is.False);
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True); // Stone not consumed
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.True); // Stone wall not consumed
         Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('#')); // Cell remains wall
+    }
+
+    [Test]
+    public void Build_TargetHasResource_ReturnsFalse()
+    {
+        _player.PlayerInventory.AddItem("StoneWall", 1);
+        _gameMap.SetCell(_player.X, _player.Y, MapCell.ResourceCell(new ResourceTile('$', new Color(), "Stone", 2)));
+
+        bool result = _player.Build(_gameMap, "StoneWall", _player.X, _player.Y);
+
+        Assert.That(result, Is.False);
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.True);
+    }
+
+    [Test]
+    public void Build_WithUnknownBlock_DefaultsToStandardWall()
+    {
+        _player.PlayerInventory.AddItem("Brick", 1);
+
+        bool result = _player.Build(_gameMap, "Brick", _player.X, _player.Y);
+
+        Assert.That(result, Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("Brick", 1), Is.False);
+        Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('#'));
+    }
+
+    [Test]
+    public void Craft_WithSufficientResources_AddsStoneWall()
+    {
+        _player.PlayerInventory.AddItem("Stone", 2);
+        var recipe = new Dictionary<string, int> { { "Stone", 2 } };
+
+        bool crafted = _player.Craft("StoneWall", recipe);
+
+        Assert.That(crafted, Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
+    }
+
+    [Test]
+    public void Craft_WithInsufficientResources_DoesNotCraft()
+    {
+        _player.PlayerInventory.AddItem("Stone", 1);
+        var recipe = new Dictionary<string, int> { { "Stone", 2 } };
+
+        bool crafted = _player.Craft("StoneWall", recipe);
+
+        Assert.That(crafted, Is.False);
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.False);
+        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True);
     }
 
     [Test]
@@ -227,15 +277,15 @@ public class PlayerTests
     }
 
     [Test]
-    public void BuildDoor_WithStonePlacesDoor()
+    public void BuildDoor_WithStoneWallPlacesDoor()
     {
-        _player.PlayerInventory.AddItem("Stone", 1);
+        _player.PlayerInventory.AddItem("StoneWall", 1);
         _gameMap.SetCell(_player.X, _player.Y, MapCell.Empty());
 
         bool result = _player.BuildDoor(_gameMap, _player.X, _player.Y);
 
         Assert.That(result, Is.True);
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.False);
         Assert.That(_gameMap.HasDoorAt(_player.X, _player.Y), Is.True);
     }
 
@@ -270,5 +320,83 @@ public class PlayerTests
         _player.TakeDamage(10);
         _player.RestoreHealth(20);
         Assert.That(_player.Health, Is.EqualTo(Player.MaxHealth));
+    }
+
+    [Test]
+    public void Eat_WithoutBerry_ReturnsFalse()
+    {
+        bool consumed = _player.Eat("Berry");
+        Assert.That(consumed, Is.False);
+        Assert.That(_player.Hunger, Is.EqualTo(Player.MaxHunger));
+    }
+
+    [Test]
+    public void BuildDoor_WithoutStoneWall_ReturnsFalse()
+    {
+        _gameMap.SetCell(_player.X, _player.Y, MapCell.Empty());
+        bool placed = _player.BuildDoor(_gameMap, _player.X, _player.Y);
+        Assert.That(placed, Is.False);
+        Assert.That(_gameMap.HasDoorAt(_player.X, _player.Y), Is.False);
+    }
+
+    [Test]
+    public void BuildDoor_TargetOccupied_ReturnsFalse()
+    {
+        _gameMap.SetCell(_player.X, _player.Y, MapCell.Wall());
+        _player.PlayerInventory.AddItem("StoneWall", 1);
+
+        bool placed = _player.BuildDoor(_gameMap, _player.X, _player.Y);
+
+        Assert.That(placed, Is.False);
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.True);
+    }
+
+    [Test]
+    public void TakeDamage_NonPositiveAmount_DoesNotChangeHealth()
+    {
+        int before = _player.Health;
+        _player.TakeDamage(0);
+        _player.TakeDamage(-5);
+        Assert.That(_player.Health, Is.EqualTo(before));
+    }
+
+    [Test]
+    public void RestoreHealth_NonPositiveAmount_DoesNotChangeHealth()
+    {
+        _player.TakeDamage(20);
+        int afterDamage = _player.Health;
+        _player.RestoreHealth(0);
+        _player.RestoreHealth(-3);
+        Assert.That(_player.Health, Is.EqualTo(afterDamage));
+    }
+
+    [Test]
+    public void UpdateSurvivalStats_LowHunger_DoesNotRegenerateHealth()
+    {
+        _player.TakeDamage(5);
+        int healthAfterDamage = _player.Health;
+
+        var hungerProperty = typeof(Player).GetProperty("Hunger", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
+        hungerProperty.SetValue(_player, Player.MaxHunger / 4);
+
+        for (int i = 0; i <= Player.HealthRegenInterval + 2; i++)
+        {
+            _player.UpdateSurvivalStats(true);
+        }
+
+        Assert.That(_player.Health, Is.EqualTo(healthAfterDamage));
+    }
+
+    [Test]
+    public void IsAlive_ReturnsTrueWhenHealthPositive()
+    {
+        Assert.That(_player.IsAlive, Is.True);
+    }
+
+    [Test]
+    public void IsAlive_ReturnsFalseWhenHealthZero()
+    {
+        _player.TakeDamage(Player.MaxHealth);
+        Assert.That(_player.IsAlive, Is.False);
     }
 }

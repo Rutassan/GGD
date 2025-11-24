@@ -1,10 +1,15 @@
 using Raylib_cs;
+using System.Collections.Generic;
 
 public class ManualPlayerController : IPlayerController
 {
     private readonly IInputService _inputService;
     private int _penaltyCounter;
     private const int PenaltyDelayFrames = 8;
+    private static readonly IReadOnlyDictionary<string, int> StoneWallRecipe = new Dictionary<string, int>
+    {
+        { "Stone", 2 }
+    };
 
     public ManualPlayerController(IInputService inputService)
     {
@@ -16,6 +21,11 @@ public class ManualPlayerController : IPlayerController
         if (_inputService.IsKeyPressed((KeyboardKey)69)) // KEY_E
         {
             player.Eat("Berry");
+        }
+
+        if (_inputService.IsKeyPressed((KeyboardKey)67)) // KEY_C
+        {
+            player.Craft("StoneWall", StoneWallRecipe);
         }
 
         if (_inputService.IsKeyPressed((KeyboardKey)79)) // KEY_O
@@ -66,7 +76,7 @@ public class ManualPlayerController : IPlayerController
 
         if (_inputService.IsKeyPressed((KeyboardKey)66))
         {
-            player.Build(map, "Stone", player.X, player.Y);
+            player.Build(map, "StoneWall", player.X, player.Y);
         }
     }
 

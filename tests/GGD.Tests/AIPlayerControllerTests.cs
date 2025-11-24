@@ -144,7 +144,7 @@ public class AIPlayerControllerTests
     public void Update_AfterDelayExpires_AIAttemptsToBuildIfHasResourcesAndEmptyCell()
     {
         // Arrange
-        _player.PlayerInventory.AddItem("Stone", 1); // Give AI a stone
+        _player.PlayerInventory.AddItem("StoneWall", 1); // Give AI a stone wall
         _gameMap.SetCell(_player.X, _player.Y, MapCell.Empty()); // Ensure current cell is empty
 
         // Act
@@ -154,8 +154,8 @@ public class AIPlayerControllerTests
         }
 
         // Assert
-        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(0)); // Stone should be consumed
-        Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('#')); // Cell should be a wall
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("StoneWall", 0), Is.EqualTo(0)); // Stone wall should be consumed
+        Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('█')); // Cell should be a stone wall
     }
 
     [Test]
@@ -259,7 +259,7 @@ public class AIPlayerControllerTests
         var pathField = typeof(AIPlayerController).GetField("_path", BindingFlags.NonPublic | BindingFlags.Instance);
         var path = (List<(int, int)>?)pathField!.GetValue(_controller);
         Assert.That(path!.Count, Is.EqualTo(0)); // Path should be cleared
-        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(0), "Stone is consumed by building.");
+        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(1), "Stone should remain after mining because building requires StoneWall.");
 
     }
 
@@ -306,7 +306,7 @@ public class AIPlayerControllerTests
         }
 
         Assert.That(stone.Health, Is.EqualTo(0), "Ресурс должен быть добыт, даже если маршрут уже был построен.");
-        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
+        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True);
 
         var path = (List<(int, int)>?)pathField!.GetValue(_controller);
         Assert.That(path, Is.Not.Null);
@@ -339,6 +339,28 @@ public class AIPlayerControllerTests
         Assert.That(path, Is.Not.Null);
         Assert.That(path!.Count, Is.EqualTo(0), "Путь должен сбрасываться, если цель исчезла.");
         Assert.That(target.HasValue, Is.False, "Цель должна сбрасываться, если ресурс пропал.");
+    }
+
+    [Test]
+    public void HandleShelterLogic_CraftsStoneWallWhenEnoughStone()
+    {
+        _player.PlayerInventory.Clear();
+        _player.PlayerInventory.AddItem("Stone", 2);
+
+        var shelterStateField = typeof(AIPlayerController).GetField("_shelterBuildState", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var shelterStateType = typeof(AIPlayerController).GetNestedType("ShelterBuildState", BindingFlags.NonPublic)!;
+        var collectingState = Enum.Parse(shelterStateType, "CollectingResources");
+        shelterStateField.SetValue(_controller, collectingState);
+
+        var requiredWallsField = typeof(AIPlayerController).GetField("_requiredShelterWalls", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        requiredWallsField.SetValue(_controller, 1);
+
+        var handleMethod = typeof(AIPlayerController).GetMethod("HandleShelterLogic", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        bool handled = (bool)handleMethod.Invoke(_controller, new object[] { _player, _gameMap })!;
+
+        Assert.That(handled, Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("StoneWall", 1), Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
     }
 
     [Test]
@@ -402,27 +424,6 @@ public class AIPlayerControllerTests
         Assert.That(path, Is.Not.Null);
         Assert.That(path!.Count, Is.EqualTo(0), "Путь должен быть пуст, если построение маршрута вернуло null.");
         Assert.That(target.HasValue, Is.False, "Цель должна сбрасываться, если путь построить нельзя.");
-    }
-
-    [Test]
-    public void Update_AfterMining_AIContinuesWithBuild()
-    {
-        _player.X = 1;
-        _player.Y = 1;
-        _player.PlayerInventory.Clear();
-
-        var stone = new ResourceTile('$', new Color(), "Stone", 1);
-        _gameMap.SetCell(1, 1, MapCell.ResourceCell(stone));
-
-        // Шаг 1: добываем
-        for (int i = 0; i <= 20; i++) { _controller.Update(_player, _gameMap, true, 0L); } // 21 calls to ensure one action and one "cool-down" tick
-        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(1));
-
-        // Шаг 2: следующий цикл должен использовать ресурс (строительство) и не зависнуть
-        for (int i = 0; i < 20; i++) { _controller.Update(_player, _gameMap, true, 0L); } 
-
-        Assert.That(_player.PlayerInventory.Resources.GetValueOrDefault("Stone", 0), Is.EqualTo(0), "Ресурс должен быть потрачен, ИИ не должен стоять на месте с ресурсом.");
-        Assert.That(_gameMap.GetCell(1, 1).IsWall, Is.True, "После добычи ИИ строит стену и продолжает работать.");
     }
 
     private class FixedRandom : Random

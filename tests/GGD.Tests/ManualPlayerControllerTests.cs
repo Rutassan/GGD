@@ -133,32 +133,47 @@ public class ManualPlayerControllerTests
     }
 
     [Test]
-    public void Update_BKeyPressed_BuildsWallAndConsumesStone()
+    public void Update_BKeyPressed_BuildsWallAndConsumesStoneWall()
     {
         var player = new Player(2, 2, '@', new Color(0, 255, 0, 255));
         var map = new AIMockGameMap();
         map.SetCell(2, 2, MapCell.Empty());
-        player.PlayerInventory.AddItem("Stone", 1);
+        player.PlayerInventory.AddItem("StoneWall", 1);
 
         _mockInputService.KeyPressed = (KeyboardKey)66;
         _controller.Update(player, map, true, 0L);
 
-        Assert.That(player.PlayerInventory.HasItem("Stone", 1), Is.False);
+        Assert.That(player.PlayerInventory.HasItem("StoneWall", 1), Is.False);
         Assert.That(map.GetCell(2, 2).IsWall, Is.True);
+        Assert.That(map.GetCell(2, 2).DisplayChar, Is.EqualTo('█'));
     }
 
     [Test]
-    public void Update_FKeyPressed_BuildsDoorAndConsumesStone()
+    public void Update_FKeyPressed_BuildsDoorAndConsumesStoneWall()
     {
         var player = new Player(2, 2, '@', new Color(0, 255, 0, 255));
         var map = new AIMockGameMap();
         map.SetCell(2, 2, MapCell.Empty());
-        player.PlayerInventory.AddItem("Stone", 1);
+        player.PlayerInventory.AddItem("StoneWall", 1);
 
         _mockInputService.KeyPressed = (KeyboardKey)70;
         _controller.Update(player, map, true, 0L);
 
         Assert.That(map.HasDoorAt(2, 2), Is.True);
+        Assert.That(player.PlayerInventory.HasItem("StoneWall", 1), Is.False);
+    }
+
+    [Test]
+    public void Update_CKeyPressed_CraftsStoneWall()
+    {
+        var player = new Player(3, 3, '@', new Color(0, 255, 0, 255));
+        var map = new AIMockGameMap();
+        player.PlayerInventory.AddItem("Stone", 2);
+
+        _mockInputService.KeyPressed = (KeyboardKey)67;
+        _controller.Update(player, map, true, 0L);
+
+        Assert.That(player.PlayerInventory.HasItem("StoneWall", 1), Is.True);
         Assert.That(player.PlayerInventory.HasItem("Stone", 1), Is.False);
     }
 
@@ -173,5 +188,45 @@ public class ManualPlayerControllerTests
         _controller.Update(player, map, true, 0L);
 
         Assert.That(map.GetCell(2, 1).Door?.IsOpen, Is.True);
+    }
+
+    [Test]
+    public void Update_EKeyPressed_EatsBerryAndConsumesResource()
+    {
+        var player = new Player(4, 4, '@', new Color(0, 255, 0, 255));
+        var map = new AIMockGameMap();
+        player.PlayerInventory.AddItem("Berry", 1);
+
+        _mockInputService.KeyPressed = (KeyboardKey)69;
+        _controller.Update(player, map, true, 0L);
+
+        Assert.That(player.PlayerInventory.HasItem("Berry", 1), Is.False);
+    }
+
+    [Test]
+    public void Update_PenalizedByFreezing_PreventsMovementEvenIfKeyPressed()
+    {
+        var player = new TestPlayer(5, 5, '@', new Color(0, 255, 0, 255));
+        player.IsFreezing = true;
+        _mockInputService.KeyPressed = (KeyboardKey)262;
+
+        _controller.Update(player, _gameMap, true, 0L);
+
+        Assert.That(player.MoveCallCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Update_PenaltyExpires_AfterEnoughFrames_AllowsMovement()
+    {
+        var player = new TestPlayer(5, 5, '@', new Color(0, 255, 0, 255));
+        player.IsFreezing = true;
+        _mockInputService.KeyPressed = (KeyboardKey)262;
+
+        for (int i = 0; i < 8; i++)
+        {
+            _controller.Update(player, _gameMap, true, 0L);
+        }
+
+        Assert.That(player.MoveCallCount, Is.EqualTo(1));
     }
 }

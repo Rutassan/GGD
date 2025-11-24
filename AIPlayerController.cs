@@ -5,6 +5,13 @@ using System.Diagnostics.CodeAnalysis;
 [ExcludeFromCodeCoverage]
 public class AIPlayerController : IPlayerController
 {
+    private const string StoneResourceType = "Stone";
+    private const string StoneWallBlock = "StoneWall";
+    private static readonly IReadOnlyDictionary<string, int> StoneWallRecipe = new Dictionary<string, int>
+    {
+        { StoneResourceType, 2 }
+    };
+
     private enum AIState
     {
         Idle,
@@ -60,7 +67,7 @@ public class AIPlayerController : IPlayerController
     private ShelterBuildState _shelterBuildState = ShelterBuildState.None;
     private (int x, int y)? _shelterSpotCenter = null;
     private Queue<BuildAction> _buildQueue = new Queue<BuildAction>();
-    private int _requiredShelterStones = 0;
+    private int _requiredShelterWalls = 0;
     private (int x, int y)? _plannedDoorPosition = null;
 
     public AIPlayerController(Func<GameMap, int, int, int, int, List<(int, int)>?>? pathfinder = null)
@@ -147,7 +154,7 @@ public class AIPlayerController : IPlayerController
             return;
         }
 
-        if (TryPlanPathToNearestResource(player, map, "Stone"))
+        if (TryPlanPathToNearestResource(player, map, StoneResourceType))
         {
             _currentState = AIState.ExecutingPath;
             ExecuteNextStep(player, map);
@@ -155,12 +162,12 @@ public class AIPlayerController : IPlayerController
         }
 
         MapCell currentCell = map.GetCell(player.X, player.Y);
-        if (player.PlayerInventory.HasItem("Stone", 1)
+        if (player.PlayerInventory.HasItem(StoneWallBlock, 1)
             && !currentCell.IsWall
             && currentCell.Resource == null)
         {
             _currentState = AIState.Building;
-            player.Build(map, "Stone", player.X, player.Y);
+            player.Build(map, StoneWallBlock, player.X, player.Y);
             return;
         }
 
@@ -204,7 +211,7 @@ public class AIPlayerController : IPlayerController
                 if (_shelterSpotCenter.HasValue)
                 {
                     _buildQueue = PlanBuildingSequence(_shelterSpotCenter.Value, _shelterSize);
-                    _requiredShelterStones = _buildQueue.Count;
+                    _requiredShelterWalls = _buildQueue.Count;
                     _shelterBuildState = ShelterBuildState.CollectingResources;
                     goto case ShelterBuildState.CollectingResources;
                 }
@@ -212,21 +219,24 @@ public class AIPlayerController : IPlayerController
                 return false;
 
             case ShelterBuildState.CollectingResources:
-                if (_requiredShelterStones > 0 && player.PlayerInventory.HasItem("Stone", _requiredShelterStones))
+                if (_requiredShelterWalls > 0 && player.PlayerInventory.HasItem(StoneWallBlock, _requiredShelterWalls))
                 {
                     _shelterBuildState = ShelterBuildState.BuildingWalls;
                     goto case ShelterBuildState.BuildingWalls;
                 }
 
-                if (!player.PlayerInventory.HasItem("Stone", 1))
+                if (player.PlayerInventory.HasItem(StoneResourceType, 2))
                 {
-                    if (TryPlanPathToNearestResource(player, map, "Stone"))
-                    {
-                        return true;
-                    }
+                    player.Craft(StoneWallBlock, StoneWallRecipe);
+                    return true;
                 }
 
                 if (TryMineCurrentCell(player, map))
+                {
+                    return true;
+                }
+
+                if (TryPlanPathToNearestResource(player, map, StoneResourceType))
                 {
                     return true;
                 }
@@ -255,7 +265,7 @@ public class AIPlayerController : IPlayerController
                     }
                     else
                     {
-                        player.Build(map, "Stone", target.X, target.Y);
+                        player.Build(map, StoneWallBlock, target.X, target.Y);
                     }
                     _buildQueue.Dequeue();
                     return true;
