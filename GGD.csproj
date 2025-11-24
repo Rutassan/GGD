@@ -15,4 +15,10 @@
     <Compile Remove="tests/**/*.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="resources/fonts/NotoSansMono-Regular.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
