@@ -31,8 +31,8 @@ public class Program
         }
 
         // Устанавливаем флаг для изменения размера окна (ConfigFlags.FLAG_WINDOW_RESIZABLE = 4)
-        Raylib.SetConfigFlags((ConfigFlags)4); 
-        Raylib.InitWindow(screenWidth, screenHeight, "ASCII Game v0.05 (Manual Controlled)"); 
+        Raylib.SetConfigFlags((ConfigFlags)4); // FLAG_WINDOW_RESIZABLE
+        Raylib.InitWindow(screenWidth, screenHeight, "ASCII Game v0.06"); 
 
         if (!Raylib.IsWindowReady())
         {
@@ -52,43 +52,39 @@ public class Program
 
         while (!Raylib.WindowShouldClose())
         {
-            gameTime++; // Увеличиваем глобальный счетчик времени
+            gameTime++;
+            player.UpdateHunger();
 
-            // Определяем, день сейчас или ночь
             bool isDay = (gameTime % TotalDayNightDuration) < DayDuration;
+            bool isInside = gameMap.IsInside(player.X, player.Y);
 
-            // Обновляем размеры экрана, если окно было изменено
             if (Raylib.IsWindowResized())
             {
                 screenWidth = Raylib.GetScreenWidth();
                 screenHeight = Raylib.GetScreenHeight();
             }
 
-            // Переключение полноэкранного режима по нажатию F11 (KeyboardKey.KEY_F11 = 300)
-            if (Raylib.IsKeyPressed((KeyboardKey)300)) 
+            if (Raylib.IsKeyPressed((KeyboardKey)300))
             {
                 ToggleFullscreenMode();
             }
 
-            // Переключение контроллеров по нажатию 'A' (65)
-            if (Raylib.IsKeyPressed((KeyboardKey)65)) 
+            if (Raylib.IsKeyPressed((KeyboardKey)65))
             {
                 if (currentController == manualController)
                 {
                     currentController = aiController;
-                    Raylib.SetWindowTitle("ASCII Game v0.05 (AI Controlled)"); 
+                    Raylib.SetWindowTitle("ASCII Game v0.06 (AI Controlled)");
                 }
                 else
                 {
                     currentController = manualController;
-                    Raylib.SetWindowTitle("ASCII Game v0.05 (Manual Controlled)"); 
+                    Raylib.SetWindowTitle("ASCII Game v0.06 (Manual Controlled)");
                 }
             }
 
+            player.IsFreezing = !isDay && !isInside;
             currentController.Update(player, gameMap, isDay, gameTime);
-
-            // Логика "холода"
-            player.IsFreezing = !isDay && !gameMap.IsInside(player.X, player.Y);
 
             int targetCharWidth = screenWidth / GameMap.MapWidth;
             int targetCharHeight = screenHeight / GameMap.MapHeight;
@@ -100,35 +96,42 @@ public class Program
             int visibleMapWidth = Math.Max(1, Math.Min(GameMap.MapWidth, screenWidth / charSize));
             int visibleMapHeight = Math.Max(1, Math.Min(GameMap.MapHeight, screenHeight / charSize));
 
-            // Камера следит за игроком
             int cameraX = player.X - visibleMapWidth / 2;
             int cameraY = player.Y - visibleMapHeight / 2;
-
-            // Ограничиваем камеру пределами карты
             cameraX = Math.Clamp(cameraX, 0, Math.Max(0, GameMap.MapWidth - visibleMapWidth));
             cameraY = Math.Clamp(cameraY, 0, Math.Max(0, GameMap.MapHeight - visibleMapHeight));
 
-
-            Color backgroundColor = isDay ? new Color(135, 206, 235, 255) : new Color(25, 25, 112, 255); // SKYBLUE или MIDNIGHTBLUE
+            Color backgroundColor = isDay ? new Color(135, 206, 235, 255) : new Color(25, 25, 112, 255);
 
             Raylib.BeginDrawing();
             Raylib.ClearBackground(backgroundColor);
             gameMap.Draw(charSize, cameraX, cameraY, visibleMapWidth, visibleMapHeight);
             player.Draw(charSize, cameraX, cameraY);
 
-            // HUD для инвентаря
+            string timeOfDayText = isDay ? "Day" : "Night";
+            Color hungerColor = player.IsStarving ? new Color(255, 100, 100, 255)
+                : player.IsHungry ? new Color(255, 235, 59, 255)
+                : new Color(255, 255, 255, 255);
+
+            Raylib.DrawText($"Time: {timeOfDayText}", 10, 10, 20, new Color(255, 255, 255, 255));
+            Raylib.DrawText($"Hunger: {player.Hunger}/{Player.MaxHunger}", 10, 35, 20, hungerColor);
+
+            ShelterInfo shelterInfo = gameMap.AnalyzeShelter(player.X, player.Y);
+            string shelterStatus = $"{shelterInfo.Classification} (Площадь {shelterInfo.Area})";
+            string doorText = shelterInfo.HasDoor ? $"Двери: {shelterInfo.DoorCount}" : "Двери: нет";
+            Raylib.DrawText($"Shelter: {shelterStatus}", 10, 60, 20, new Color(255, 255, 255, 255));
+            Raylib.DrawText($"{doorText}", 10, 85, 18, new Color(215, 215, 255, 255));
+            Raylib.DrawText("E=Ягоды | F=Построить дверь | O=Открыть/закрыть", 10, 110, 18, new Color(200, 255, 200, 255));
+
+            int hudX = screenWidth - 220;
             int hudY = 10;
-            Raylib.DrawText("Inventory:", screenWidth - 200, hudY, 20, new Color(255, 255, 255, 255)); // WHITE
+            Raylib.DrawText("Inventory:", hudX, hudY, 20, new Color(255, 255, 255, 255));
             hudY += 25;
             foreach (var item in player.PlayerInventory.Resources)
             {
-                Raylib.DrawText($"{item.Key}: {item.Value}", screenWidth - 200, hudY, 20, new Color(255, 255, 255, 255)); // WHITE
+                Raylib.DrawText($"{item.Key}: {item.Value}", hudX, hudY, 20, new Color(255, 255, 255, 255));
                 hudY += 25;
             }
-
-            // HUD для цикла дня/ночи
-            string timeOfDayText = isDay ? "Day" : "Night";
-            Raylib.DrawText($"Time: {timeOfDayText}", 10, 10, 20, new Color(255, 255, 255, 255)); // WHITE
 
             Raylib.EndDrawing();
         }

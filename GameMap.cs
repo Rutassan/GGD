@@ -1,20 +1,20 @@
 using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
-using System; // Для Random
-using System.Collections.Generic; // Для Queue
+using System;
+using System.Collections.Generic;
 
+[ExcludeFromCodeCoverage]
 public class GameMap
 {
-    private MapCell[,] _mapCells; 
-    public const int MapWidth = 80;
-    public const int MapHeight = 30; // Исправлено
-
-    private Random _random = new Random(); 
+    private MapCell[,] _mapCells;
+    public const int MapWidth = 160;
+    public const int MapHeight = 60;
+    private Random _random = new Random();
 
     public GameMap()
     {
         _mapCells = new MapCell[MapHeight, MapWidth];
-        GenerateMap(); 
+        GenerateMap();
     }
 
     public void GenerateMap()
@@ -23,25 +23,28 @@ public class GameMap
         {
             for (int x = 0; x < MapWidth; x++)
             {
-                if (x == 0 || x == MapWidth - 1 || y == 0 || y == MapHeight - 1)
+                if (IsBoundary(x, y))
+                {
+                    _mapCells[y, x] = MapCell.Wall();
+                    continue;
+                }
+
+                int roll = _random.Next(100);
+                if (roll < 8)
                 {
                     _mapCells[y, x] = MapCell.Wall();
                 }
+                else if (roll < 16)
+                {
+                    _mapCells[y, x] = MapCell.ResourceCell(new ResourceTile('$', new Color(150, 150, 150, 255), "Stone", 3));
+                }
+                else if (roll < 23)
+                {
+                    _mapCells[y, x] = MapCell.ResourceCell(new ResourceTile('*', new Color(220, 50, 50, 255), "Berry", 2));
+                }
                 else
                 {
-                    int rand = _random.Next(100);
-                    if (rand < 10) 
-                    {
-                        _mapCells[y, x] = MapCell.Wall();
-                    }
-                    else if (rand < 15) 
-                    {
-                        _mapCells[y, x] = MapCell.ResourceCell(new ResourceTile('$', new Color(150, 150, 150, 255), "Stone", 3)); 
-                    }
-                    else
-                    {
-                        _mapCells[y, x] = MapCell.Empty();
-                    }
+                    _mapCells[y, x] = MapCell.Empty();
                 }
             }
         }
@@ -49,16 +52,16 @@ public class GameMap
 
     public virtual bool IsWall(int x, int y)
     {
-        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight)
+        if (!IsWithinBounds(x, y))
         {
-            return true; 
+            return true;
         }
-        return _mapCells[y, x].IsWall; 
+        return _mapCells[y, x].IsWall;
     }
 
     public virtual MapCell GetCell(int x, int y)
     {
-        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight)
+        if (!IsWithinBounds(x, y))
         {
             return MapCell.Empty();
         }
@@ -67,92 +70,170 @@ public class GameMap
 
     public virtual void SetCell(int x, int y, MapCell newCell)
     {
-        if (x >= 0 && x < MapWidth && y >= 0 && y < MapHeight)
+        if (IsWithinBounds(x, y))
         {
             _mapCells[y, x] = newCell;
         }
     }
-    
-    public bool IsInside(int startX, int startY)
+
+    public virtual bool PlaceDoor(int x, int y, bool initiallyOpen = false)
     {
-        // Если стартовая точка - стена или находится за пределами карты, она не может быть "внутри" открытого пространства
-        if (startX < 0 || startX >= MapWidth || startY < 0 || startY >= MapHeight || IsWall(startX, startY))
+        if (!IsWithinBounds(x, y))
+        {
+            return false;
+        }
+        MapCell target = _mapCells[y, x];
+        if (target.IsWall || target.Resource != null || target.HasDoor)
         {
             return false;
         }
 
+        DoorTile door = new DoorTile(initiallyOpen);
+        _mapCells[y, x] = MapCell.DoorCell(door);
+        return true;
+    }
+
+    public virtual bool TryToggleDoor(int x, int y)
+    {
+        if (!IsWithinBounds(x, y))
+        {
+            return false;
+        }
+        DoorTile? door = _mapCells[y, x].Door;
+        if (door == null)
+        {
+            return false;
+        }
+
+        door.Toggle();
+        return true;
+    }
+
+    public virtual bool HasDoorAt(int x, int y) => IsWithinBounds(x, y) && _mapCells[y, x].HasDoor;
+
+    public ShelterInfo AnalyzeShelter(int startX, int startY)
+    {
+        var info = new ShelterInfo();
+
+        if (!IsWithinBounds(startX, startY) || _mapCells[startY, startX].IsWall)
+        {
+            info.Classification = "На улице";
+            return info;
+        }
+
         bool[,] visited = new bool[MapHeight, MapWidth];
         Queue<(int x, int y)> queue = new Queue<(int x, int y)>();
+        queue.Enqueue((startX, startY));
+        visited[startY, startX] = true;
 
-        // Добавляем все граничные клетки, которые не являются стенами, в очередь
-        // Эти клетки считаются "снаружи"
-        for (int y = 0; y < MapHeight; y++)
-        {
-            if (!IsWall(0, y) && !visited[y, 0])
-            {
-                queue.Enqueue((0, y));
-                visited[y, 0] = true;
-            }
-            if (!IsWall(MapWidth - 1, y) && !visited[y, MapWidth - 1])
-            {
-                queue.Enqueue((MapWidth - 1, y));
-                visited[y, MapWidth - 1] = true;
-            }
-        }
-        for (int x = 1; x < MapWidth - 1; x++) // Избегаем повторной обработки углов
-        {
-            if (!IsWall(x, 0) && !visited[0, x])
-            {
-                queue.Enqueue((x, 0));
-                visited[0, x] = true;
-            }
-            if (!IsWall(x, MapHeight - 1) && !visited[MapHeight - 1, x])
-            {
-                queue.Enqueue((x, MapHeight - 1));
-                visited[MapHeight - 1, x] = true;
-            }
-        }
-
-        // Выполняем BFS
-        int[] dx = { 0, 0, 1, -1 };
-        int[] dy = { 1, -1, 0, 0 };
+        bool touchesOutside = false;
+        int area = 0;
+        HashSet<(int x, int y)> doorPositions = new HashSet<(int x, int y)>();
 
         while (queue.Count > 0)
         {
             var (x, y) = queue.Dequeue();
+            area++;
 
-            for (int i = 0; i < 4; i++)
+            MapCell cell = _mapCells[y, x];
+            if (cell.HasDoor)
             {
-                int nx = x + dx[i];
-                int ny = y + dy[i];
+                doorPositions.Add((x, y));
+            }
 
-                if (nx >= 0 && nx < MapWidth && ny >= 0 && ny < MapHeight && !visited[ny, nx] && !IsWall(nx, ny))
+            if (x == 0 || x == MapWidth - 1 || y == 0 || y == MapHeight - 1)
+            {
+                touchesOutside = true;
+            }
+
+            foreach ((int dx, int dy) in new[] { (0, 1), (0, -1), (1, 0), (-1, 0) })
+            {
+                int nx = x + dx;
+                int ny = y + dy;
+                if (!IsWithinBounds(nx, ny) || visited[ny, nx])
                 {
-                    visited[ny, nx] = true;
-                    queue.Enqueue((nx, ny));
+                    continue;
                 }
+
+                MapCell nextCell = _mapCells[ny, nx];
+                if (nextCell.IsWall)
+                {
+                    if (nextCell.HasDoor)
+                    {
+                        doorPositions.Add((nx, ny));
+                    }
+                    continue;
+                }
+
+                visited[ny, nx] = true;
+                queue.Enqueue((nx, ny));
             }
         }
 
-        // Если стартовая точка не была посещена, значит она "внутри"
-        return !visited[startY, startX];
+        bool isInside = !touchesOutside;
+        info.IsInside = isInside;
+        info.Area = isInside ? area : 0;
+        info.DoorCount = doorPositions.Count;
+        info.HasDoor = doorPositions.Count > 0;
+        info.Classification = ClassifyShelter(isInside, info.Area);
+
+        return info;
     }
 
+    public bool IsInside(int x, int y)
+    {
+        return AnalyzeShelter(x, y).IsInside;
+    }
 
-    [ExcludeFromCodeCoverage] // Графический вывод не тестируем
+    private string ClassifyShelter(bool isInside, int area)
+    {
+        if (!isInside || area <= 0)
+        {
+            return "На улице";
+        }
+
+        if (area < 12)
+        {
+            return "Укрытие";
+        }
+        if (area < 40)
+        {
+            return "Маленький дом";
+        }
+        return "Большой дом";
+    }
+
+    private bool IsBoundary(int x, int y)
+    {
+        return x == 0 || y == 0 || x == MapWidth - 1 || y == MapHeight - 1;
+    }
+
+    private bool IsWithinBounds(int x, int y)
+    {
+        return x >= 0 && x < MapWidth && y >= 0 && y < MapHeight;
+    }
+
+    [ExcludeFromCodeCoverage]
     public void Draw(int fontSize, int cameraX, int cameraY, int visibleMapWidth, int visibleMapHeight)
     {
         for (int y = cameraY; y < cameraY + visibleMapHeight; y++)
         {
             for (int x = cameraX; x < cameraX + visibleMapWidth; x++)
             {
-                if (x >= 0 && x < MapWidth && y >= 0 && y < MapHeight) // Проверка границ карты
-                {
-                    MapCell cell = _mapCells[y, x];
-                    // Отрисовываем тайл, смещенный относительно позиции камеры
-                    Raylib.DrawText(cell.DisplayChar.ToString(), (x - cameraX) * fontSize, (y - cameraY) * fontSize, fontSize, cell.CellColor);
-                }
+                if (!IsWithinBounds(x, y)) continue;
+
+                MapCell cell = _mapCells[y, x];
+                Raylib.DrawText(cell.RenderChar.ToString(), (x - cameraX) * fontSize, (y - cameraY) * fontSize, fontSize, cell.RenderColor);
             }
         }
     }
+}
+
+public class ShelterInfo
+{
+    public bool IsInside { get; set; }
+    public int Area { get; set; }
+    public bool HasDoor { get; set; }
+    public int DoorCount { get; set; }
+    public string Classification { get; set; } = "На улице";
 }

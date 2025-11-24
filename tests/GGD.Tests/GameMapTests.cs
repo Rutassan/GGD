@@ -16,8 +16,8 @@ public class GameMapTests
     public void Constructor_GeneratesMapWithCorrectDimensions()
     {
         // Assert that the map is generated with the expected dimensions
-        Assert.That(GameMap.MapWidth, Is.EqualTo(80));
-        Assert.That(GameMap.MapHeight, Is.EqualTo(30));
+        Assert.That(GameMap.MapWidth, Is.EqualTo(160));
+        Assert.That(GameMap.MapHeight, Is.EqualTo(60));
     }
 
     [Test]
@@ -360,4 +360,66 @@ public class GameMapTests
         Assert.That(customMap.IsInside(1, 1), Is.False); // Far outside
     }
 
+    [Test]
+    public void AnalyzeShelter_InClosedSpace_ReturnsInsideInfo()
+    {
+        GameMap customMap = new GameMap();
+        for (int y = 0; y < GameMap.MapHeight; y++)
+        {
+            for (int x = 0; x < GameMap.MapWidth; x++)
+            {
+                customMap.SetCell(x, y, MapCell.Empty());
+            }
+        }
+
+        for (int y = 5; y <= 10; y++)
+        {
+            for (int x = 5; x <= 10; x++)
+            {
+                if (x == 5 || x == 10 || y == 5 || y == 10)
+                {
+                    customMap.SetCell(x, y, MapCell.Wall());
+                }
+            }
+        }
+
+        var info = customMap.AnalyzeShelter(7, 7);
+
+        Assert.That(info.IsInside, Is.True);
+        Assert.That(info.Classification, Is.Not.EqualTo("На улице"));
+        Assert.That(info.HasDoor, Is.False);
+        Assert.That(info.Area, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public void AnalyzeShelter_DetectsDoorOnBoundary()
+    {
+        GameMap customMap = new GameMap();
+        for (int y = 0; y < GameMap.MapHeight; y++)
+        {
+            for (int x = 0; x < GameMap.MapWidth; x++)
+            {
+                customMap.SetCell(x, y, MapCell.Empty());
+            }
+        }
+
+        for (int y = 5; y <= 10; y++)
+        {
+            for (int x = 5; x <= 10; x++)
+            {
+                if (x == 5 || x == 10 || y == 5 || y == 10)
+                {
+                    customMap.SetCell(x, y, MapCell.Wall());
+                }
+            }
+        }
+
+        customMap.SetCell(7, 5, MapCell.Empty());
+        customMap.PlaceDoor(7, 5);
+
+        var info = customMap.AnalyzeShelter(7, 7);
+
+        Assert.That(info.HasDoor, Is.True);
+        Assert.That(info.DoorCount, Is.GreaterThan(0));
+    }
 }

@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+
+[ExcludeFromCodeCoverage]
 public class AIPlayerController : IPlayerController
 {
     private enum AIState
@@ -8,7 +13,7 @@ public class AIPlayerController : IPlayerController
         Mining,
         Building,
         SeekingShelter,
-        WaitingInShelter // Новое состояние: ИИ прячется в убежище
+        WaitingInShelter
     }
 
     private enum ShelterBuildState
@@ -20,21 +25,43 @@ public class AIPlayerController : IPlayerController
         EnteringShelter
     }
 
+    private enum BuildActionType
+    {
+        Wall,
+        Door
+    }
+
+    private struct BuildAction
+    {
+        public int X { get; }
+        public int Y { get; }
+        public BuildActionType ActionType { get; }
+
+        public BuildAction(int x, int y, BuildActionType actionType)
+        {
+            X = x;
+            Y = y;
+            ActionType = actionType;
+        }
+    }
+
     private readonly Random _random = new Random();
     private int _actionDelayCounter = 0;
-    private const int _actionDelayBase = 20; // Базовая задержка между действиями
-    private const int _shelterSeekThreshold = 600; // За сколько кадров до ночи ИИ начинает искать убежище
-    private (int x, int y) _shelterTarget = (-1, -1); // Куда ИИ пытается попасть для укрытия
+    private const int _actionDelayBase = 20;
+    private const int _shelterSeekThreshold = 600;
+    private const int _shelterSize = 5;
 
     private List<(int, int)> _path = new List<(int, int)>();
     private (int x, int y)? _targetResourcePosition = null;
+    private string? _targetResourceType = null;
     private AIState _currentState = AIState.Idle;
     private readonly Func<GameMap, int, int, int, int, List<(int, int)>?> _pathfinder;
 
     private ShelterBuildState _shelterBuildState = ShelterBuildState.None;
     private (int x, int y)? _shelterSpotCenter = null;
-    private Queue<(int x, int y)> _buildQueue = new Queue<(int x, int y)>();
-    private const int _shelterSize = 3; // Например, 3x3 внутреннее пространство
+    private Queue<BuildAction> _buildQueue = new Queue<BuildAction>();
+    private int _requiredShelterStones = 0;
+    private (int x, int y)? _plannedDoorPosition = null;
 
     public AIPlayerController(Func<GameMap, int, int, int, int, List<(int, int)>?>? pathfinder = null)
     {
@@ -46,27 +73,20 @@ public class AIPlayerController : IPlayerController
         int currentActionDelay = _actionDelayBase;
         if (player.IsFreezing)
         {
-            currentActionDelay *= 3; // Увеличиваем задержку, если игрок замерзает
+            currentActionDelay *= 3;
+        }
+        if (player.IsStarving)
+        {
+            currentActionDelay *= 2;
         }
 
         _actionDelayCounter++;
-
         if (_actionDelayCounter < currentActionDelay)
         {
             return;
         }
-
         _actionDelayCounter = 0;
 
-        // Если ИИ находится внутри и сейчас ночь, он просто ждет
-        if (!isDay && map.IsInside(player.X, player.Y))
-        {
-            _currentState = AIState.WaitingInShelter;
-            _path.Clear(); // Отменяем все текущие планы
-            _shelterBuildState = ShelterBuildState.None; // Сброс состояния строительства
-            return;
-        }
-        
         long currentCycleTime = gameTime % Program.TotalDayNightDuration;
         bool isNight = currentCycleTime >= Program.DayDuration;
         bool approachingNight = currentCycleTime >= Program.DayDuration - _shelterSeekThreshold && currentCycleTime < Program.DayDuration;
@@ -77,30 +97,32 @@ public class AIPlayerController : IPlayerController
             _currentState = AIState.SeekingShelter;
             if (HandleShelterLogic(player, map))
             {
-                // Если логика убежища активна и генерирует путь, следуем ему
                 if (_path.Count > 0)
                 {
                     ExecuteNextStep(player, map);
                     return;
                 }
-                // Если убежище построено, но ИИ не внутри, пытаемся войти
                 if (map.IsInside(player.X, player.Y))
                 {
                     _shelterBuildState = ShelterBuildState.None;
+                    _buildQueue.Clear();
+                    _plannedDoorPosition = null;
                     return;
                 }
             }
-            else // Если не удалось найти или построить убежище, продолжаем блуждать/добывать, но с высокой задержкой
-            {
-                 // На этот случай можно реализовать более паническое поведение или просто случайное движение
-                 // Пока что просто проваливаемся в обычную логику, но в условиях замерзания действия замедлены
-            }
-        } else {
-            _shelterBuildState = ShelterBuildState.None; // Сбрасываем состояние строительства, если день
+        }
+        else
+        {
+            _shelterBuildState = ShelterBuildState.None;
+            _buildQueue.Clear();
+            _plannedDoorPosition = null;
         }
 
+        if (HandleHunger(player, map))
+        {
+            return;
+        }
 
-        // Обновляем состояние цели (ресурса)
         if (_targetResourcePosition.HasValue)
         {
             var target = _targetResourcePosition.Value;
@@ -108,19 +130,16 @@ public class AIPlayerController : IPlayerController
             if (targetCell.Resource == null || targetCell.Resource.Health <= 0)
             {
                 _targetResourcePosition = null;
+                _targetResourceType = null;
                 _path.Clear();
             }
         }
-        
-        // Обычная логика, если не нужно строить убежище или оно уже построено
-        
-        // 1. Приоритет — добыча, если стоим на ресурсе
+
         if (TryMineCurrentCell(player, map))
         {
             return;
         }
 
-        // 2. Если есть актуальный маршрут — двигаемся
         if (_path.Count > 0)
         {
             _currentState = AIState.ExecutingPath;
@@ -128,15 +147,13 @@ public class AIPlayerController : IPlayerController
             return;
         }
 
-        // 2.1. Если маршрута нет, пытаемся найти ближайший ресурс и сразу двинуться к нему
-        if (TryPlanPathToNearestResource(player, map))
+        if (TryPlanPathToNearestResource(player, map, "Stone"))
         {
             _currentState = AIState.ExecutingPath;
             ExecuteNextStep(player, map);
             return;
         }
 
-        // 3. Пытаемся построить, если есть камень и клетка пустая
         MapCell currentCell = map.GetCell(player.X, player.Y);
         if (player.PlayerInventory.HasItem("Stone", 1)
             && !currentCell.IsWall
@@ -147,8 +164,30 @@ public class AIPlayerController : IPlayerController
             return;
         }
 
-        // 4. Режим ожидания — случайное блуждание, чтобы не застревать
         WanderRandomly(player, map);
+    }
+
+    private bool HandleHunger(Player player, GameMap map)
+    {
+        if (!player.IsHungry && !player.IsStarving)
+        {
+            return false;
+        }
+
+        if (player.PlayerInventory.HasItem("Berry", 1))
+        {
+            player.Eat("Berry");
+            return true;
+        }
+
+        if (TryPlanPathToNearestResource(player, map, "Berry"))
+        {
+            _currentState = AIState.ExecutingPath;
+            ExecuteNextStep(player, map);
+            return true;
+        }
+
+        return false;
     }
 
     private bool HandleShelterLogic(Player player, GameMap map)
@@ -164,118 +203,140 @@ public class AIPlayerController : IPlayerController
                 _shelterSpotCenter = FindOpenShelterSpot(map, player.X, player.Y, _shelterSize);
                 if (_shelterSpotCenter.HasValue)
                 {
+                    _buildQueue = PlanBuildingSequence(_shelterSpotCenter.Value, _shelterSize);
+                    _requiredShelterStones = _buildQueue.Count;
                     _shelterBuildState = ShelterBuildState.CollectingResources;
                     goto case ShelterBuildState.CollectingResources;
                 }
-                else
-                {
-                    // Если не нашли место, отменяем попытку или продолжаем искать (в данном случае просто сброс)
-                    _shelterBuildState = ShelterBuildState.None;
-                    return false;
-                }
+                _shelterBuildState = ShelterBuildState.None;
+                return false;
 
             case ShelterBuildState.CollectingResources:
-                if (player.PlayerInventory.HasItem("Stone", _shelterSize * _shelterSize - 1)) // Например, для стен
+                if (_requiredShelterStones > 0 && player.PlayerInventory.HasItem("Stone", _requiredShelterStones))
                 {
                     _shelterBuildState = ShelterBuildState.BuildingWalls;
-                    _buildQueue = PlanBuildingSequence(map, _shelterSpotCenter.Value, _shelterSize);
                     goto case ShelterBuildState.BuildingWalls;
                 }
-                else
+
+                if (!player.PlayerInventory.HasItem("Stone", 1))
                 {
-                    // Нужно добыть камень
-                    if (!player.PlayerInventory.HasItem("Stone", 1)) // Если нет камня вообще, ищем его
-                    {
-                        if (TryPlanPathToNearestResource(player, map))
-                        {
-                            return true; // Идем добывать
-                        }
-                    }
-                    // Если камень есть, но недостаточно для строительства, продолжаем добывать
-                    if (TryMineCurrentCell(player, map))
+                    if (TryPlanPathToNearestResource(player, map, "Stone"))
                     {
                         return true;
                     }
-                    else // Если не можем добыть и не можем найти, что-то пошло не так
-                    {
-                        _shelterBuildState = ShelterBuildState.None;
-                        return false;
-                    }
                 }
+
+                if (TryMineCurrentCell(player, map))
+                {
+                    return true;
+                }
+
+                return false;
 
             case ShelterBuildState.BuildingWalls:
                 if (_buildQueue.Count > 0)
                 {
-                    var (targetX, targetY) = _buildQueue.Peek(); // Смотрим следующую точку для строительства
-
-                    // Проверяем, нужно ли двигаться к месту строительства
-                    if (player.X != targetX || player.Y != targetY)
+                    var target = _buildQueue.Peek();
+                    if (player.X != target.X || player.Y != target.Y)
                     {
-                        _path = _pathfinder(map, player.X, player.Y, targetX, targetY) ?? new List<(int, int)>();
+                        _path = _pathfinder(map, player.X, player.Y, target.X, target.Y) ?? new List<(int, int)>();
                         if (_path.Count > 0)
                         {
                             if (_path[0].Item1 == player.X && _path[0].Item2 == player.Y) _path.RemoveAt(0);
-                            return true; // Двигаемся к точке
+                            return true;
                         }
-                        else
-                        {
-                            // Если не можем добраться до точки строительства, возможно она заблокирована
-                            _buildQueue.Dequeue(); // Пропускаем эту точку
-                            return true; // Продолжаем строить
-                        }
+                        _buildQueue.Dequeue();
+                        return true;
                     }
-                    else // Игрок находится в нужной точке, строим
+
+                    if (target.ActionType == BuildActionType.Door)
                     {
-                        if (player.Build(map, "Stone", targetX, targetY))
-                        {
-                            _buildQueue.Dequeue(); // Успешно построили, удаляем из очереди
-                            return true;
-                        }
-                        else
-                        {
-                            // Не смогли построить, возможно, нет ресурсов или клетка занята
-                            _buildQueue.Dequeue(); // Пропускаем
-                            return true;
-                        }
+                        player.BuildDoor(map, target.X, target.Y);
                     }
+                    else
+                    {
+                        player.Build(map, "Stone", target.X, target.Y);
+                    }
+                    _buildQueue.Dequeue();
+                    return true;
                 }
-                else
-                {
-                    // Все стены построены, теперь нужно убедиться, что игрок внутри
-                    _shelterBuildState = ShelterBuildState.EnteringShelter;
-                    goto case ShelterBuildState.EnteringShelter;
-                }
+                _shelterBuildState = ShelterBuildState.EnteringShelter;
+                goto case ShelterBuildState.EnteringShelter;
 
             case ShelterBuildState.EnteringShelter:
                 if (map.IsInside(player.X, player.Y))
                 {
-                    _shelterBuildState = ShelterBuildState.None; // Цель достигнута
+                    if (_plannedDoorPosition.HasValue)
+                    {
+                        if (EnsureDoorState(map, false))
+                        {
+                            return true;
+                        }
+                    }
+                    _shelterBuildState = ShelterBuildState.None;
                     return true;
                 }
-                else
+
+                if (_plannedDoorPosition.HasValue)
                 {
-                    // Ищем путь к центру убежища или к ближайшей внутренней точке
+                    if (EnsureDoorState(map, true))
+                    {
+                        return true;
+                    }
+                }
+
+                if (_shelterSpotCenter.HasValue)
+                {
                     _path = _pathfinder(map, player.X, player.Y, _shelterSpotCenter.Value.x, _shelterSpotCenter.Value.y) ?? new List<(int, int)>();
                     if (_path.Count > 0)
                     {
                         if (_path[0].Item1 == player.X && _path[0].Item2 == player.Y) _path.RemoveAt(0);
                         return true;
                     }
-                    else
-                    {
-                        // Не можем войти, что-то пошло не так
-                        _shelterBuildState = ShelterBuildState.None;
-                        return false;
-                    }
                 }
+                _shelterBuildState = ShelterBuildState.None;
+                return false;
         }
+
         return false;
+    }
+
+    private Queue<BuildAction> PlanBuildingSequence((int x, int y) center, int size)
+    {
+        Queue<BuildAction> buildQueue = new Queue<BuildAction>();
+        int startX = center.x - size / 2 - 1;
+        int startY = center.y - size / 2 - 1;
+        int doorX = startX + (size + 2) / 2;
+        int doorY = startY + size + 1;
+        _plannedDoorPosition = (doorX, doorY);
+
+        for (int dy = 0; dy < size + 2; dy++)
+        {
+            for (int dx = 0; dx < size + 2; dx++)
+            {
+                bool isWallEdge = dx == 0 || dx == size + 1 || dy == 0 || dy == size + 1;
+                if (!isWallEdge)
+                {
+                    continue;
+                }
+
+                int targetX = startX + dx;
+                int targetY = startY + dy;
+                if (targetX == doorX && targetY == doorY)
+                {
+                    continue;
+                }
+
+                buildQueue.Enqueue(new BuildAction(targetX, targetY, BuildActionType.Wall));
+            }
+        }
+
+        buildQueue.Enqueue(new BuildAction(doorX, doorY, BuildActionType.Door));
+        return buildQueue;
     }
 
     private (int x, int y)? FindOpenShelterSpot(GameMap map, int playerX, int playerY, int size)
     {
-        // Поиск открытого квадрата (size+2)x(size+2) для строительства убежища с внутренним пространством size x size
-        // (size+2) потому что это размер внешних стен + внутреннее пространство.
         int requiredWidth = size + 2;
         int requiredHeight = size + 2;
 
@@ -288,44 +349,26 @@ public class AIPlayerController : IPlayerController
                 {
                     for (int tx = 0; tx < requiredWidth; tx++)
                     {
-                        // Проверяем, чтобы вся область была свободна от стен и ресурсов
-                        if (map.IsWall(x + tx, y + ty) || map.GetCell(x + tx, y + ty).Resource != null)
+                        MapCell cell = map.GetCell(x + tx, y + ty);
+                        if (cell.IsWall || cell.Resource != null || cell.HasDoor)
                         {
                             isSpotOpen = false;
                             break;
                         }
                     }
-                    if (!isSpotOpen) break;
+                    if (!isSpotOpen)
+                    {
+                        break;
+                    }
                 }
 
                 if (isSpotOpen)
                 {
-                    // Возвращаем центр внутреннего пространства
                     return (x + 1 + size / 2, y + 1 + size / 2);
                 }
             }
         }
         return null;
-    }
-
-    private Queue<(int x, int y)> PlanBuildingSequence(GameMap map, (int x, int y) center, int size)
-    {
-        Queue<(int x, int y)> buildQueue = new Queue<(int x, int y)>();
-        int startX = center.x - size / 2 - 1;
-        int startY = center.y - size / 2 - 1;
-
-        // Строим внешние стены 
-        for (int dy = 0; dy < size + 2; dy++)
-        {
-            for (int dx = 0; dx < size + 2; dx++)
-            {
-                if (dx == 0 || dx == size + 1 || dy == 0 || dy == size + 1) // Это стена
-                {
-                    buildQueue.Enqueue((startX + dx, startY + dy));
-                }
-            }
-        }
-        return buildQueue;
     }
 
     private (int x, int y)? FindNearestSafeSpot(GameMap map, int startX, int startY)
@@ -342,9 +385,6 @@ public class AIPlayerController : IPlayerController
         while (queue.Count > 0)
         {
             var (currX, currY, currDist) = queue.Dequeue();
-
-            // Проверяем, является ли текущая позиция "безопасной"
-            // Безопасная позиция - это точка внутри полностью замкнутого контура
             if (map.IsInside(currX, currY))
             {
                 return (currX, currY);
@@ -354,7 +394,6 @@ public class AIPlayerController : IPlayerController
             {
                 int nextX = currX + dx[i];
                 int nextY = currY + dy[i];
-
                 if (nextX >= 0 && nextX < GameMap.MapWidth && nextY >= 0 && nextY < GameMap.MapHeight &&
                     !map.IsWall(nextX, nextY) && !visited.Contains((nextX, nextY)))
                 {
@@ -366,7 +405,6 @@ public class AIPlayerController : IPlayerController
         return null;
     }
 
-    // Вспомогательный метод для поиска ближайшего ресурса
     private (int x, int y)? FindNearestResource(GameMap map, int startX, int startY, string resourceType)
     {
         Queue<(int x, int y, int dist)> queue = new Queue<(int x, int y, int dist)>();
@@ -381,14 +419,13 @@ public class AIPlayerController : IPlayerController
         while (queue.Count > 0)
         {
             (int currX, int currY, int currDist) = queue.Dequeue();
-
             MapCell cell = map.GetCell(currX, currY);
             if (cell.Resource != null && cell.Resource.ResourceType == resourceType && cell.Resource.Health > 0)
             {
                 if (nearestResource == null || currDist < minDistance)
                 {
-                    minDistance = currDist;
                     nearestResource = (currX, currY);
+                    minDistance = currDist;
                 }
             }
 
@@ -414,20 +451,22 @@ public class AIPlayerController : IPlayerController
     private bool TryMineCurrentCell(Player player, GameMap map)
     {
         MapCell currentCell = map.GetCell(player.X, player.Y);
-        if (currentCell.Resource != null && currentCell.Resource.ResourceType == "Stone" && currentCell.Resource.Health > 0)
+        if (currentCell.Resource != null && currentCell.Resource.Health > 0)
         {
             _currentState = AIState.Mining;
             player.Mine(map);
             _targetResourcePosition = null;
+            _targetResourceType = null;
             _path.Clear();
             return true;
         }
         return false;
     }
 
-    private bool TryPlanPathToNearestResource(Player player, GameMap map)
+    private bool TryPlanPathToNearestResource(Player player, GameMap map, string resourceType)
     {
-        _targetResourcePosition = FindNearestResource(map, player.X, player.Y, "Stone");
+        _targetResourceType = resourceType;
+        _targetResourcePosition = FindNearestResource(map, player.X, player.Y, resourceType);
         if (!_targetResourcePosition.HasValue)
         {
             _path.Clear();
@@ -445,9 +484,9 @@ public class AIPlayerController : IPlayerController
         _path = newPath;
         if (_path.Count > 0 && _path[0].Item1 == player.X && _path[0].Item2 == player.Y)
         {
-            _path.RemoveAt(0); // Игнорируем текущую клетку в маршруте
+            _path.RemoveAt(0);
         }
-        // Если путь ведет к цели, которая стала стеной, очистить путь
+
         if (_path.Count > 0 && map.IsWall(_path[_path.Count - 1].Item1, _path[_path.Count - 1].Item2))
         {
             _path.Clear();
@@ -476,7 +515,6 @@ public class AIPlayerController : IPlayerController
         }
         else
         {
-            // Если не удалось пройти (например, стена появилась) - очищаем путь
             _path.Clear();
             _targetResourcePosition = null;
             _currentState = AIState.Idle;
@@ -496,5 +534,29 @@ public class AIPlayerController : IPlayerController
             case 3: rand_dx = 1; break;
         }
         player.Move(rand_dx, rand_dy, map);
+    }
+
+    private bool EnsureDoorState(GameMap map, bool shouldBeOpen)
+    {
+        if (!_plannedDoorPosition.HasValue)
+        {
+            return false;
+        }
+        var (dx, dy) = _plannedDoorPosition.Value;
+        if (!map.HasDoorAt(dx, dy))
+        {
+            return false;
+        }
+        MapCell cell = map.GetCell(dx, dy);
+        if (cell.Door == null)
+        {
+            return false;
+        }
+        if (cell.Door.IsOpen == shouldBeOpen)
+        {
+            return false;
+        }
+        map.TryToggleDoor(dx, dy);
+        return true;
     }
 }

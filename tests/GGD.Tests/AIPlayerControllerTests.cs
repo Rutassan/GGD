@@ -53,6 +53,38 @@ public class AIMockGameMap : GameMap
             MockCells[y, x] = newCell;
         }
     }
+
+    public override bool PlaceDoor(int x, int y, bool initiallyOpen = false)
+    {
+        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return false;
+        MapCell target = MockCells[y, x];
+        if (target.IsWall || target.Resource != null || target.HasDoor)
+        {
+            return false;
+        }
+        DoorTile door = new DoorTile(initiallyOpen);
+        MockCells[y, x] = MapCell.DoorCell(door);
+        return true;
+    }
+
+    public override bool TryToggleDoor(int x, int y)
+    {
+        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return false;
+        DoorTile? door = MockCells[y, x].Door;
+        if (door == null)
+        {
+            return false;
+        }
+        door.Toggle();
+        MockCells[y, x] = MapCell.DoorCell(door);
+        return true;
+    }
+
+    public override bool HasDoorAt(int x, int y)
+    {
+        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return false;
+        return MockCells[y, x].HasDoor;
+    }
 }
 
 

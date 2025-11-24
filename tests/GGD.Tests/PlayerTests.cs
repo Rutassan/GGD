@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Raylib_cs;
 
@@ -36,6 +37,38 @@ public class MockGameMap : GameMap
         {
             MockCells[y, x] = newCell;
         }
+    }
+
+    public override bool PlaceDoor(int x, int y, bool initiallyOpen = false)
+    {
+        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return false;
+        MapCell target = MockCells[y, x];
+        if (target.IsWall || target.Resource != null || target.HasDoor)
+        {
+            return false;
+        }
+        DoorTile door = new DoorTile(initiallyOpen);
+        MockCells[y, x] = MapCell.DoorCell(door);
+        return true;
+    }
+
+    public override bool TryToggleDoor(int x, int y)
+    {
+        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return false;
+        DoorTile? door = MockCells[y, x].Door;
+        if (door == null)
+        {
+            return false;
+        }
+        door.Toggle();
+        MockCells[y, x] = MapCell.DoorCell(door);
+        return true;
+    }
+
+    public override bool HasDoorAt(int x, int y)
+    {
+        if (x < 0 || x >= MapWidth || y < 0 || y >= MapHeight) return false;
+        return MockCells[y, x].HasDoor;
     }
 }
 
@@ -163,5 +196,46 @@ public class PlayerTests
         Assert.That(result, Is.False);
         Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.True); // Stone not consumed
         Assert.That(_gameMap.GetCell(_player.X, _player.Y).DisplayChar, Is.EqualTo('#')); // Cell remains wall
+    }
+
+    [Test]
+    public void UpdateHunger_DecreasesOverTime()
+    {
+        int initial = _player.Hunger;
+        for (int i = 0; i < Player.MaxHunger; i++)
+        {
+            _player.UpdateHunger();
+        }
+        Assert.That(_player.Hunger, Is.LessThan(initial));
+    }
+
+    [Test]
+    public void Eat_RestoresHungerAndConsumesBerry()
+    {
+        for (int i = 0; i < 300; i++)
+        {
+            _player.UpdateHunger();
+        }
+
+        int before = _player.Hunger;
+        _player.PlayerInventory.AddItem("Berry", 1);
+        bool consumed = _player.Eat("Berry");
+
+        Assert.That(consumed, Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("Berry", 1), Is.False);
+        Assert.That(_player.Hunger, Is.EqualTo(Math.Min(Player.MaxHunger, before + 30)));
+    }
+
+    [Test]
+    public void BuildDoor_WithStonePlacesDoor()
+    {
+        _player.PlayerInventory.AddItem("Stone", 1);
+        _gameMap.SetCell(_player.X, _player.Y, MapCell.Empty());
+
+        bool result = _player.BuildDoor(_gameMap, _player.X, _player.Y);
+
+        Assert.That(result, Is.True);
+        Assert.That(_player.PlayerInventory.HasItem("Stone", 1), Is.False);
+        Assert.That(_gameMap.HasDoorAt(_player.X, _player.Y), Is.True);
     }
 }

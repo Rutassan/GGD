@@ -78,7 +78,7 @@ public class ManualPlayerControllerTests
     [Test]
     public void Update_RightKeyPressed_MovesPlayerRight()
     {
-        _mockInputService.KeyPressed = (KeyboardKey)262; // KEY_RIGHT
+        _mockInputService.KeyPressed = (KeyboardKey)262;
         _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(1));
@@ -88,7 +88,7 @@ public class ManualPlayerControllerTests
     [Test]
     public void Update_LeftKeyPressed_MovesPlayerLeft()
     {
-        _mockInputService.KeyPressed = (KeyboardKey)263; // KEY_LEFT
+        _mockInputService.KeyPressed = (KeyboardKey)263;
         _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(-1));
@@ -98,7 +98,7 @@ public class ManualPlayerControllerTests
     [Test]
     public void Update_UpKeyPressed_MovesPlayerUp()
     {
-        _mockInputService.KeyPressed = (KeyboardKey)265; // KEY_UP
+        _mockInputService.KeyPressed = (KeyboardKey)265;
         _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(0));
@@ -108,7 +108,7 @@ public class ManualPlayerControllerTests
     [Test]
     public void Update_DownKeyPressed_MovesPlayerDown()
     {
-        _mockInputService.KeyPressed = (KeyboardKey)264; // KEY_DOWN
+        _mockInputService.KeyPressed = (KeyboardKey)264;
         _controller.Update(_player, _gameMap, true, 0L);
         Assert.That(_player.MoveCallCount, Is.EqualTo(1));
         Assert.That(_player.LastDx, Is.EqualTo(0));
@@ -123,7 +123,7 @@ public class ManualPlayerControllerTests
         var stone = new ResourceTile('$', new Color(), "Stone", 1);
         map.SetCell(1, 1, MapCell.ResourceCell(stone));
 
-        _mockInputService.KeyPressed = (KeyboardKey)77; // KEY_M
+        _mockInputService.KeyPressed = (KeyboardKey)77;
         _controller.Update(player, map, true, 0L);
 
         Assert.That(stone.Health, Is.EqualTo(0));
@@ -140,10 +140,38 @@ public class ManualPlayerControllerTests
         map.SetCell(2, 2, MapCell.Empty());
         player.PlayerInventory.AddItem("Stone", 1);
 
-        _mockInputService.KeyPressed = (KeyboardKey)66; // KEY_B
+        _mockInputService.KeyPressed = (KeyboardKey)66;
         _controller.Update(player, map, true, 0L);
 
         Assert.That(player.PlayerInventory.HasItem("Stone", 1), Is.False);
         Assert.That(map.GetCell(2, 2).IsWall, Is.True);
+    }
+
+    [Test]
+    public void Update_FKeyPressed_BuildsDoorAndConsumesStone()
+    {
+        var player = new Player(2, 2, '@', new Color(0, 255, 0, 255));
+        var map = new AIMockGameMap();
+        map.SetCell(2, 2, MapCell.Empty());
+        player.PlayerInventory.AddItem("Stone", 1);
+
+        _mockInputService.KeyPressed = (KeyboardKey)70;
+        _controller.Update(player, map, true, 0L);
+
+        Assert.That(map.HasDoorAt(2, 2), Is.True);
+        Assert.That(player.PlayerInventory.HasItem("Stone", 1), Is.False);
+    }
+
+    [Test]
+    public void Update_OKeyPressed_TogglesAdjacentDoor()
+    {
+        var player = new Player(2, 2, '@', new Color(0, 255, 0, 255));
+        var map = new AIMockGameMap();
+        map.PlaceDoor(2, 1); // Place a door above the player
+
+        _mockInputService.KeyPressed = (KeyboardKey)79;
+        _controller.Update(player, map, true, 0L);
+
+        Assert.That(map.GetCell(2, 1).Door?.IsOpen, Is.True);
     }
 }

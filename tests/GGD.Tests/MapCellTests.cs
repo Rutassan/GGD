@@ -91,4 +91,19 @@ public class MapCellTests
         Assert.That(resourceCell.IsWall, Is.False);
         Assert.That(resourceCell.Resource, Is.EqualTo(resource));
     }
+
+    [Test]
+    public void DoorCell_ReflectsDoorState()
+    {
+        DoorTile door = new DoorTile(false);
+        MapCell doorCell = MapCell.DoorCell(door);
+
+        Assert.That(doorCell.HasDoor, Is.True);
+        Assert.That(doorCell.IsWall, Is.True);
+        Assert.That(doorCell.RenderChar, Is.EqualTo(door.ClosedChar));
+
+        door.Toggle();
+        Assert.That(doorCell.IsWall, Is.False);
+        Assert.That(doorCell.RenderChar, Is.EqualTo(door.OpenChar));
+    }
 }

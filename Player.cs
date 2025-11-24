@@ -1,6 +1,6 @@
+using System;
 using System.Diagnostics.CodeAnalysis;
 using Raylib_cs;
-using System; // For Console.WriteLine
 
 public class Player
 {
@@ -10,6 +10,13 @@ public class Player
     public Color Color { get; set; }
     public Inventory PlayerInventory { get; private set; }
     public bool IsFreezing { get; set; } // Новое свойство для состояния "замерзания"
+    private const int HungerDecayInterval = 60;
+    private const int HungerRecoveryPerFood = 30;
+    public const int MaxHunger = 100;
+    private int _hungerDecayCounter;
+    public int Hunger { get; private set; }
+    public bool IsStarving => Hunger <= 0;
+    public bool IsHungry => Hunger <= 30;
 
     public Player(int x, int y, char character, Color color)
     {
@@ -19,6 +26,8 @@ public class Player
         Color = color;
         PlayerInventory = new Inventory();
         IsFreezing = false; // Инициализируем по умолчанию
+        Hunger = MaxHunger;
+        _hungerDecayCounter = 0;
     }
 
     [ExcludeFromCodeCoverage]
@@ -56,6 +65,27 @@ public class Player
         }
     }
 
+    public bool Eat(string resourceType)
+    {
+        if (!PlayerInventory.HasItem(resourceType, 1))
+        {
+            return false;
+        }
+        PlayerInventory.RemoveItem(resourceType, 1);
+        Hunger = Math.Min(MaxHunger, Hunger + HungerRecoveryPerFood);
+        return true;
+    }
+
+    public void UpdateHunger()
+    {
+        _hungerDecayCounter++;
+        if (_hungerDecayCounter >= HungerDecayInterval)
+        {
+            Hunger = Math.Max(0, Hunger - 1);
+            _hungerDecayCounter = 0;
+        }
+    }
+
     public bool Build(GameMap map, string resourceType, int targetX, int targetY)
     {
         // Пока что строим только стены из "Stone"
@@ -69,6 +99,21 @@ public class Player
                 map.SetCell(targetX, targetY, MapCell.Wall()); // Строим стену
                 return true;
             }
+        }
+        return false;
+    }
+
+    public bool BuildDoor(GameMap map, int targetX, int targetY)
+    {
+        if (!PlayerInventory.HasItem("Stone", 1))
+        {
+            return false;
+        }
+
+        if (map.PlaceDoor(targetX, targetY))
+        {
+            PlayerInventory.RemoveItem("Stone", 1);
+            return true;
         }
         return false;
     }
